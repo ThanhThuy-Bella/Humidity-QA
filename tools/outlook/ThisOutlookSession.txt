@@ -1,0 +1,179 @@
+' =====================================================================
+'  THV Humidity Inspection - Tu nap "Daily Stock Report THV-WH" tu Outlook len web
+'  Phien ban 1.0 - 02/11/2026
+'
+'  CACH CAI: Outlook classic > Alt+F11 > Project1 > Microsoft Outlook Objects
+'            > double-click ThisOutlookSession > dan TOAN BO file nay > Ctrl+S
+'            > sua 2 hang so WEBHOOK_URL, WEBHOOK_SECRET ben duoi > tat va mo lai Outlook.
+'
+'  HOAT DONG:
+'   - Mail moi co tieu de chua SUBJECT_KEY va file .xlsx -> gui file len web
+'     (/api/import/webhook). Web tu nap bao cao kho, lap ke hoach, gui email (neu bat).
+'   - Moi lan mo Outlook: quet lai mail CATCHUP_DAYS ngay gan nhat, mail nao chua nap thi nap.
+'   - Mail da nap ghi vao file %APPDATA%\HumidityTHV\da_nap.txt (khong sua mail).
+'   - Nhat ky: %APPDATA%\HumidityTHV\log.txt  (Alt+F8 > XemNhatKy)
+'   - Chay tay: Alt+F8 > QuetMailChuaNap
+'  Gioi han: file Excel <= ~3 MB (web nhan toi da 4,5 MB sau khi ma hoa).
+' =====================================================================
+Option Explicit
+
+' ---- CAU HINH (sua 2 dong dau) ----
+Private Const WEBHOOK_URL As String = "https://kiem-am-thv.vercel.app/api/import/webhook"
+Private Const WEBHOOK_SECRET As String = "DAN-GIA-TRI-IMPORT_WEBHOOK_SECRET-O-VERCEL-VAO-DAY"
+Private Const SUBJECT_KEY As String = "Daily Stock Report THV-WH"
+Private Const SUBFOLDER As String = ""        ' "" = Inbox. Neu co rule chuyen mail vao thu muc con cua Inbox, ghi ten thu muc do
+Private Const CATCHUP_DAYS As Integer = 2     ' so ngay quet lai khi mo Outlook
+Private Const SHOW_ERROR As Boolean = True    ' True = hien hop thong bao khi gui loi
+
+' ---- Su kien Outlook ----
+Private Sub Application_Startup()
+    On Error Resume Next
+    QuetMailChuaNap
+End Sub
+
+Private Sub Application_NewMailEx(ByVal EntryIDCollection As String)
+    Dim ids() As String, i As Long, it As Object
+    On Error Resume Next
+    ids = Split(EntryIDCollection, ",")
+    For i = LBound(ids) To UBound(ids)
+        Set it = Nothing
+        Set it = Application.Session.GetItemFromID(Trim$(ids(i)))
+        If Not it Is Nothing Then
+            If it.Class = 43 Then XuLyMail it        ' 43 = olMail
+        End If
+    Next i
+End Sub
+
+' ---- Chay tay: Alt+F8 > QuetMailChuaNap ----
+Public Sub QuetMailChuaNap()
+    Dim fld As Object, its As Object, it As Object, cutoff As Date
+    On Error GoTo Loi
+    Set fld = Application.Session.GetDefaultFolder(6)   ' 6 = olFolderInbox
+    If Len(SUBFOLDER) > 0 Then Set fld = fld.Folders(SUBFOLDER)
+    cutoff = Date - CATCHUP_DAYS
+    Set its = fld.Items
+    its.Sort "[ReceivedTime]", True
+    For Each it In its
+        If it.Class = 43 Then
+            If it.ReceivedTime < cutoff Then Exit For
+            XuLyMail it
+        End If
+    Next it
+    Exit Sub
+Loi:
+    GhiLog "LOI quet mail: " & Err.Description
+End Sub
+
+Public Sub XemNhatKy()
+    Shell "notepad.exe """ & ThuMuc() & "\log.txt""", vbNormalFocus
+End Sub
+
+' ---- Xu ly 1 mail ----
+Private Sub XuLyMail(ByVal m As Object)
+    Dim att As Object, p As String, kq As String, found As Boolean, loiMsg As String
+    On Error GoTo Loi
+    If InStr(1, m.Subject, SUBJECT_KEY, vbTextCompare) = 0 Then Exit Sub
+    If DaNap(m.EntryID) Then Exit Sub
+    For Each att In m.Attachments
+        If LCase$(Right$(att.FileName, 5)) = ".xlsx" Then
+            found = True
+            p = Environ$("TEMP") & "\hm_" & Format$(Now, "yyyymmddhhnnss") & "_" & att.FileName
+            att.SaveAsFile p
+            kq = GuiLenWeb(p, att.FileName, m.Subject)
+            Kill p
+            If Left$(kq, 2) <> "OK" Then
+                loiMsg = kq
+                GoTo BaoLoi
+            End If
+        End If
+    Next att
+    If Not found Then Exit Sub
+    DanhDauDaNap m.EntryID
+    GhiLog "OK   " & m.Subject & " | " & kq
+    Exit Sub
+Loi:
+    loiMsg = "VBA: " & Err.Description
+    Resume BaoLoi
+BaoLoi:
+    On Error Resume Next
+    If Len(p) > 0 Then Kill p
+    GhiLog "LOI  " & m.Subject & " | " & loiMsg
+    If SHOW_ERROR Then MsgBox "Khong nap duoc bao cao kho len web:" & vbCrLf & m.Subject & vbCrLf & vbCrLf & loiMsg & vbCrLf & vbCrLf & _
+        "Vao web > Cap nhat bao cao kho de tai file len tay, hoac Alt+F8 > QuetMailChuaNap de thu lai.", vbExclamation, "Humidity THV"
+End Sub
+
+' ---- Gui file len web ----
+Private Function GuiLenWeb(ByVal p As String, ByVal fileName As String, ByVal subj As String) As String
+    Dim body As String, http As Object
+    body = "{""fileName"":""" & JsonEsc(fileName) & """,""subject"":""" & JsonEsc(subj) & _
+           """,""contentBase64"":""" & FileToBase64(p) & """}"
+    Set http = CreateObject("MSXML2.XMLHTTP.6.0")   ' dung proxy cua Windows/IE neu cong ty co proxy
+    http.Open "POST", WEBHOOK_URL, False
+    http.setRequestHeader "Content-Type", "application/json"
+    http.setRequestHeader "x-webhook-secret", WEBHOOK_SECRET
+    http.send body
+    If http.Status = 200 Then
+        GuiLenWeb = "OK " & Left$(Replace(http.responseText, vbLf, " "), 300)
+    Else
+        GuiLenWeb = "HTTP " & http.Status & " " & Left$(http.responseText, 300)
+    End If
+End Function
+
+Private Function FileToBase64(ByVal p As String) As String
+    Dim st As Object, xml As Object, el As Object
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 1          ' adTypeBinary
+    st.Open
+    st.LoadFromFile p
+    Set xml = CreateObject("MSXML2.DOMDocument.6.0")
+    Set el = xml.createElement("b")
+    el.DataType = "bin.base64"
+    el.nodeTypedValue = st.Read
+    st.Close
+    FileToBase64 = Replace(Replace(el.Text, vbLf, ""), vbCr, "")
+End Function
+
+Private Function JsonEsc(ByVal s As String) As String
+    s = Replace(s, "\", "\\")
+    s = Replace(s, """", "\""")
+    s = Replace(s, vbCr, " ")
+    s = Replace(s, vbLf, " ")
+    s = Replace(s, vbTab, " ")
+    JsonEsc = s
+End Function
+
+' ---- Danh sach mail da nap + nhat ky ----
+Private Function ThuMuc() As String
+    ThuMuc = Environ$("APPDATA") & "\HumidityTHV"
+    If Len(Dir$(ThuMuc, vbDirectory)) = 0 Then MkDir ThuMuc
+End Function
+
+Private Function DaNap(ByVal id As String) As Boolean
+    Dim f As String, n As Integer, s As String
+    f = ThuMuc() & "\da_nap.txt"
+    If Len(Dir$(f)) = 0 Then Exit Function
+    n = FreeFile
+    Open f For Input As #n
+    Do While Not EOF(n)
+        Line Input #n, s
+        If s = id Then DaNap = True: Exit Do
+    Loop
+    Close #n
+End Function
+
+Private Sub DanhDauDaNap(ByVal id As String)
+    Dim n As Integer
+    n = FreeFile
+    Open ThuMuc() & "\da_nap.txt" For Append As #n
+    Print #n, id
+    Close #n
+End Sub
+
+Private Sub GhiLog(ByVal s As String)
+    Dim n As Integer
+    On Error Resume Next
+    n = FreeFile
+    Open ThuMuc() & "\log.txt" For Append As #n
+    Print #n, Format$(Now, "yyyy-mm-dd hh:nn:ss") & "  " & s
+    Close #n
+End Sub
