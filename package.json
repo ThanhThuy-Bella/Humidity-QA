@@ -1,0 +1,39 @@
+{
+  "name": "humidity-inspection-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "THV / EHV FG Warehouse – Humidity Inspection System (thay thế file VBA Humidity_Inspection_System.xlsm)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test:engine": "tsx scripts/test-engine.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.4",
+    "exceljs": "^4.4.0",
+    "html5-qrcode": "^2.3.8",
+    "jszip": "^3.10.1",
+    "next": "15.5.27",
+    "nodemailer": "^6.10.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/nodemailer": "^6.4.17",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": { "node": ">=20" }
+}
