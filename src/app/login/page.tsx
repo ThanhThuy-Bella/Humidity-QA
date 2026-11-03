@@ -15,9 +15,19 @@ function LoginForm() {
     e.preventDefault();
     setBusy(true);
     setErr("");
-    const { error } = await supabaseBrowser().auth.signInWithPassword({ email: email.trim(), password: pw });
+    let error: { message: string } | null = null;
+    try {
+      ({ error } = await supabaseBrowser().auth.signInWithPassword({ email: email.trim(), password: pw }));
+    } catch (ex) {
+      error = { message: ex instanceof Error ? ex.message : String(ex) };
+    }
     setBusy(false);
-    if (error) return setErr("Sai email hoặc mật khẩu.");
+    if (error) {
+      const m = error.message || "";
+      if (/invalid login credentials/i.test(m)) return setErr("Sai email hoặc mật khẩu.");
+      if (/email not confirmed/i.test(m)) return setErr("Email chưa được xác nhận – nhờ admin xác nhận tài khoản.");
+      return setErr("Không đăng nhập được: " + m);
+    }
     const next = sp.get("next") || "/";
     router.replace(next.startsWith("/") && !next.startsWith("//") ? next : "/");
     router.refresh();

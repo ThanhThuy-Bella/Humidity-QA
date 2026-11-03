@@ -45,7 +45,7 @@ export default async function HomePage() {
             <ActionButton url="/api/email/test" body={{ now: true }} ghost
               label={sentToday ? "Gửi lại kế hoạch hôm nay" : "Gửi kế hoạch hôm nay"} busyLabel="Đang gửi…"
               confirm={`Gửi email kế hoạch kiểm ẩm hôm nay (${due.length} lô) cho danh sách người nhận trong Cài đặt?`}
-              render={(d) => (d.sent ? `Đã gửi: ${d.subject}` : `Không gửi: ${d.reason}`)} />
+              result="email" />
           )}
           <Link href="/" className="btn-ghost">Làm mới</Link>
         </>}

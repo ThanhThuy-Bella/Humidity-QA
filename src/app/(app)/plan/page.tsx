@@ -30,7 +30,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SP }) {
         actions={<>
           {me && ["admin", "planner"].includes(me.role) && (
             <ActionButton url="/api/plan/regenerate" label="Lập lại kế hoạch" ghost
-              render={(d) => `${d.newTasks} lô mới · ${d.rescheduled} dời lịch · ${d.removed} hủy · ${d.archived} đóng`} />
+              result="plan" />
           )}
           <ExportLink href="/api/export/plan" />
         </>} />

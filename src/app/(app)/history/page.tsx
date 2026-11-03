@@ -61,7 +61,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: SP }
                   <td><ResultBadge r={h.result} /></td><td>{h.qa}</td><td className="num">{pct(h.rework_humidity)}</td>
                   <td className={`text-xs ${h.source?.includes("CAPA") ? "text-fail font-semibold" : "text-mute"}`}>{h.source}</td>
                   <td>{c ? <Link className="text-teal-dark underline" href={`/capa/${c.id}`}>{c.capa_no}</Link>
-                    : h.result !== "NO DATA" && <ActionButton url="/api/capa" body={{ planId: h.plan_id }} label="Tạo" ghost render={(d) => `${d.capa_no}`} />}</td>
+                    : h.result !== "NO DATA" && <ActionButton url="/api/capa" body={{ planId: h.plan_id }} label="Tạo" ghost result="capa" />}</td>
                   <td>{h.result === "FAIL" && h.plan_id.startsWith("HI-") && h.rework_humidity === null && <ReworkButton planId={h.plan_id} target="desk" size="sm" label="Kiểm lại" />}</td>
                   <td className="text-mute">{h.plan_id}</td>
                 </tr>

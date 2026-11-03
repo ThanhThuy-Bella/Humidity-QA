@@ -32,7 +32,7 @@ export default async function ImportPage() {
           <p className="text-xs text-mute mt-2 break-all">Webhook: <code>{appUrl}/api/import/webhook</code></p>
           <p className="text-xs text-mute mt-1">Hướng dẫn cài flow: docs/05-trien-khai.md, mục 7.</p>
           {canPlan && <div className="mt-3"><ActionButton url="/api/plan/regenerate" ghost label="Lập lại kế hoạch (không cần file mới)"
-            render={(d) => `${d.newTasks} lô mới · ${d.rescheduled} dời lịch · ${d.removed} hủy · ${d.archived} đóng`} /></div>}
+            result="plan" /></div>}
         </Card>
       </div>
       <h2 className="text-lg font-semibold text-teal-dark mb-2">Các lần nạp gần đây</h2>

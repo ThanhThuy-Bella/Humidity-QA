@@ -37,7 +37,7 @@ export default async function SettingsPage() {
                     <td>{m.error ?? m.subject}</td>
                     <td>{canEdit && i === 0 && m.kind === "DAILY" && m.status === "ERROR" && (
                       <ActionButton url="/api/email/test" body={{ now: true }} label="Gửi lại" ghost confirm="Gửi lại email kế hoạch hôm nay cho cả danh sách?"
-                        render={(d) => (d.sent ? "Đã gửi" : `Không gửi: ${d.reason}`)} />
+                        result="resend" />
                     )}</td></tr>
                 ))}</tbody>
               </table>
