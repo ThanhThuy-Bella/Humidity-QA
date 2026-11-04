@@ -166,40 +166,45 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
   return (
     <div className="-mx-3 -mt-3 min-h-[calc(100vh-56px)] flex flex-col bg-page">
       {/* đầu: lô + dãy thùng */}
-      <div className="bg-white border-b border-line px-4 pt-3 pb-2">
+      <div className="bg-teal text-white px-4 pt-3 pb-3 shadow-sm">
+        <Link href="/m" className="inline-flex items-center gap-1 text-sm font-semibold text-white/90 mb-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden><path d="m15 18-6-6 6-6" /></svg>
+          Danh sách lô
+        </Link>
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
-            <div className="text-[22px] leading-tight font-bold text-teal-dark break-all">{plan.jo}</div>
-            <div className="text-sm text-mute">{plan.brand_code} – PO {plan.buyer_po}</div>
+            <div className="text-[22px] leading-tight font-bold break-all">{plan.jo}</div>
+            <div className="text-sm text-white/90">{plan.brand_code} – PO {plan.buyer_po}</div>
+            {plan.color && <div className="mt-1 inline-block rounded-lg bg-white text-[#9A3412] px-2 py-0.5 text-sm font-bold">Màu {plan.color}</div>}
           </div>
-          <div className="text-right shrink-0">
-            <div className="text-[22px] font-bold tabular-nums leading-tight">{tested}<span className="text-mute text-base">/{rows.length}</span></div>
-            <div className="text-xs text-mute">thùng xong</div>
+          <div className="text-right shrink-0 rounded-xl bg-white/15 px-3 py-1.5">
+            <div className="text-[22px] font-bold tabular-nums leading-tight">{tested}<span className="text-white/80 text-base">/{rows.length}</span></div>
+            <div className="text-xs text-white/90">thùng xong</div>
           </div>
         </div>
         <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1" role="tablist" aria-label="Thùng mẫu">
           {rows.map((r, i) => {
             const m = maxOf(r);
-            const c = m !== null && m > limit && done(r) ? "bg-fail text-white" : done(r) ? "bg-pass text-white" : i === cur && step !== "done" ? "bg-teal text-white" : "bg-[#E7EDF0] text-ink";
+            const c = m !== null && m > limit && done(r) ? "bg-[#DC2626] text-white" : done(r) ? "bg-[#16A34A] text-white" : i === cur && step !== "done" ? "bg-[#FACC15] text-[#422006]" : "bg-white/20 text-white";
             return (
               <button key={r.sampleNo} role="tab" aria-selected={i === cur} onClick={() => goto(i)}
-                className={`shrink-0 min-w-11 h-11 rounded-lg text-base font-bold ${c} ${i === cur && step !== "done" ? "ring-2 ring-offset-2 ring-teal" : ""}`}>
+                className={`shrink-0 min-w-11 h-11 rounded-lg text-base font-bold ${c} ${i === cur && step !== "done" ? "ring-2 ring-white" : ""}`}>
                 {r.sampleNo}{queue[r.sampleNo] && <span className="sr-only"> chưa gửi</span>}
               </button>
             );
           })}
         </div>
         {plan.kind === "REWORK" && (
-          <div className="mt-2 rounded-lg bg-fail-bg text-fail px-3 py-2 text-sm font-semibold">
+          <div className="mt-2 rounded-lg bg-[#EDE9FE] text-[#5B21B6] px-3 py-2 text-sm font-semibold">
             Kiểm lại sau tái chế – lô gốc {plan.parent_plan_id}. Đo lại toàn bộ {rows.length} thùng mẫu.
           </div>
         )}
         {(!online || pending > 0) && (
-          <div className="mt-1 text-sm text-warn font-semibold" role="status">
+          <div className="mt-2 rounded-lg bg-[#FEF3C7] text-[#92400E] px-3 py-1.5 text-sm font-semibold" role="status">
             {!online ? "Mất sóng – cứ đo tiếp, " : ""}{pending ? `${pending} thùng chờ gửi${online ? " – đang gửi…" : ""}` : ""}
           </div>
         )}
-        {err && <div className="mt-1 text-sm text-fail font-semibold" role="alert">{err}</div>}
+        {err && <div className="mt-2 rounded-lg bg-[#FEE2E2] text-[#991B1B] px-3 py-1.5 text-sm font-semibold" role="alert">{err}</div>}
       </div>
 
       {step === "done" ? (
@@ -211,7 +216,7 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
             {([["loc", "Vị trí"], ["carton", "Số thùng"], ["read", "Đo 3 áo"]] as const).map(([k, l], i) => (
               <li key={k} className="flex-1">
                 <button onClick={() => { setStep(k); setField(k === "read" ? 0 : "carton"); }} disabled={k === "loc" && !locs.length}
-                  className={`w-full py-2.5 border-b-[3px] ${step === k ? "border-teal text-teal-dark" : "border-transparent text-mute"}`}>
+                  className={`w-full py-3 border-b-4 ${step === k ? "border-[#FACC15] text-teal-dark bg-[#F0F9FF]" : "border-transparent text-mute"}`}>
                   {i + 1}. {l}
                 </button>
               </li>
