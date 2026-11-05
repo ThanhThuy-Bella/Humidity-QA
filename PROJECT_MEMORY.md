@@ -111,7 +111,7 @@ humidity-inspection-web/
 ├─ README.md · package.json (next 15.5.27, react 19.2.8) · package-lock.json
 ├─ next.config.ts · tailwind.config.ts (màu VBA: teal #1693B5, teal-dark #0E6F8A, pass #2E9E5B, fail #D64545, input #FFFBE6)
 ├─ vercel.json (region sin1, cron "0 1 * * 1-6" daily-plan + "0 2 * * 1-6" email-deadline) · .env.example · tsconfig.json
-├─ supabase/ migrations/0001_schema.sql · 0002_auto_mail.sql · 0003_email_text.sql · seed.sql · seed-parts/seed-{1,2,3}-*.sql
+├─ supabase/ migrations/0001_schema.sql · 0002_auto_mail.sql · 0003_email_text.sql · 0004_mail_secret.sql · seed.sql · seed-parts/seed-{1,2,3}-*.sql
 ├─ tools/outlook/ThisOutlookSession.txt (macro Outlook tự nạp báo cáo kho)
 ├─ scripts/ test-engine.ts · make-seed.ts · test-email.ts
 ├─ docs/ 01-business-rules · 02-kien-truc · 03-doi-chieu-man-hinh · 04-migration · 05-trien-khai · 06-review-va-kiem-thu · 07-huong-dan-qa-dien-thoai · email-preview-mau.html
@@ -174,6 +174,7 @@ Biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KE
 - **Sau mỗi thay đổi:** cập nhật file này (mục 1, 2, 3, 8, 9 và ngày cập nhật), đóng gói zip (loại `node_modules`, `.next`), `present_files`.
 
 ## Nhật ký phiên bản
+- **v1.8 (05/11/2026)** – biến SMTP_* trên Vercel không tới được web (health EMAIL=false dù chị báo đã lưu + redeploy) ⇒ thêm bảng **`mail_secret`** (id=1; RLS bật, không policy, revoke anon/authenticated) – `smtpConfig()` trong dailyPlan.ts: ưu tiên env, không có thì đọc DB. `/api/health` trả `mail.source` (env|db) + host. Hộp thư gửi: thuytt@esquel.com qua smtp.office365.com:587 (chưa biết SMTP AUTH đã bật chưa). File `0004_mail_secret.sql` (đã gộp 0001). KHÔNG ghi mật khẩu vào PROJECT_MEMORY.
 - **v1.7.1 (05/11/2026)** – file đính kèm email đổi tên `HUMIDITY_CHECKING_PLAN_dd-mm-yyyy.xlsx` (biểu mẫu lô cần kiểm hôm nay). Nội dung chị chốt: tiêu đề `HUMIDITY CHECKING PLAN - {ngay}`; lời mở đầu gửi A.Hòa (hạ thùng trước 9h) + C.Tươi (dán lại thùng sau kiểm) – đặt bằng SQL update settings hoặc Cài đặt → Email.
 - **v1.7 (05/11/2026)** – theo yêu cầu chị: (1) form công nhân **bỏ bước Vị trí/Pallet** – còn 2 bước Số thùng+SL áo → Đo 3 áo; (2) web máy tính **bỏ menu "Nhập kết quả" và "CAPA"**, bỏ nút Nhập kết quả/link JO ở Tổng quan & Kế hoạch, bỏ cột CAPA ở Lịch sử (thay bằng cột Trạng thái: Chờ tái chế / Đang kiểm lại / Đạt sau tái chế), bỏ CAPA khỏi email & Dashboard; **không tự tạo CAPA** nữa (`CAPA_ENABLED=false` trong process.ts, trang /capa vẫn còn nhưng ẩn); (3) **Kiểm lại khi FAIL**: app /m có mục "Lô KHÔNG ĐẠT – chờ tái chế & kiểm lại" (FAIL 90 ngày, chưa có rework_humidity, chưa có lượt REWORK mở) với nút "Bắt đầu kiểm lại"; Lịch sử nút Kiểm lại mở form điện thoại.
 - **v1.6 (05/11/2026)** – Cài đặt → Email: chị tự viết **tiêu đề** (biến {ngay} {so_lo} {so_tre} {ngay_mai} {so_lo_mai} {so_capa}), **lời mở đầu**, **chữ ký**. Cột mới `settings.email_subject_tpl / email_intro / email_signature` – `0003_email_text.sql` (đã gộp vào 0001); `src/lib/email/defaults.ts`; nếu DB chưa có cột thì dùng mặc định. "(0 trễ hạn)" tự bỏ khỏi tiêu đề.
