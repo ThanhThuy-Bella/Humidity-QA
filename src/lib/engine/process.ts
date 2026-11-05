@@ -167,7 +167,8 @@ export async function archivePlan(db: DB, s: Settings, planId: string, userId?: 
   await db.from("inspection_plan").update({ status: "ARCHIVED", final_result: res, inspection_date: inspDt, updated_at: new Date().toISOString() }).eq("plan_id", planId);
 
   let capaNo: string | null = null;
-  if (res === "FAIL") capaNo = await createCapaForPlan(db, s, plan, max, inspDt!, userId);
+  // v1.7: bỏ CAPA – lô FAIL xử lý bằng "Kiểm lại sau tái chế" trên app điện thoại / Lịch sử kiểm
+  if (res === "FAIL" && CAPA_ENABLED) capaNo = await createCapaForPlan(db, s, plan, max, inspDt!, userId);
   await log(db, "ARCHIVE", { planId, result: res, capaNo }, userId);
   return { archived: true, result: res, capaNo };
 }
@@ -210,7 +211,8 @@ export async function archiveCompleted(db: DB, s: Settings) {
   return n;
 }
 
-// ===================================================================== 10. CAPA – tự tạo khi lô FAIL
+// ===================================================================== 10. CAPA – tự tạo khi lô FAIL (tắt từ v1.7)
+const CAPA_ENABLED = false;
 export async function nextCapaNo(db: DB): Promise<string> {
   const t = todayVN();
   const prefix = `CAPA-${t.slice(2, 4)}${t.slice(5, 7)}-`;

@@ -32,7 +32,7 @@ export async function buildDailyEmail(s: Settings) {
   });
   const formRows = dueLots(plans, today, false);
   const attachment = await toBuffer(await exportForm(formRows, s, today));
-  return { ...mail, attachment, fileName: `Humidity_Form_${today.replace(/-/g, "")}.xlsx` };
+  return { ...mail, attachment, fileName: `HUMIDITY_CHECKING_PLAN_${today.slice(8, 10)}-${today.slice(5, 7)}-${today.slice(0, 4)}.xlsx` };
 }
 
 type Mail = { to: string[]; cc?: string[]; subject: string; html: string; text: string; attachment?: Buffer; fileName?: string };

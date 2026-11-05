@@ -16,13 +16,13 @@ export async function createRework(db: SupabaseClient, _s: Settings, parentId: s
   if (open) return { planId: open.plan_id as string, existed: true };
 
   const { data: parent } = await db.from("inspection_plan").select("*").eq("plan_id", parentId).maybeSingle();
-  if (!parent) throw new Error("Chỉ kiểm lại được lô kiểm trên hệ thống mới (lô LEGACY nhập độ ẩm tái chế trong phiếu CAPA).");
+  if (!parent) throw new Error("Chỉ kiểm lại được lô kiểm trên hệ thống mới (lô LEGACY không kiểm lại được trên app).");
   if (parent.kind === "REWORK") throw new Error("Hãy mở kiểm lại từ lô gốc.");
   if (parent.status !== "ARCHIVED" || parent.final_result !== "FAIL") throw new Error("Lô này không ở trạng thái FAIL đã đóng.");
 
   const { data: prev } = await db.from("inspection_plan").select("plan_id,final_result")
     .eq("parent_plan_id", parentId).eq("kind", "REWORK").eq("status", "ARCHIVED").order("created_at", { ascending: false });
-  if (prev?.[0]?.final_result === "PASS") throw new Error("Lô đã kiểm lại ĐẠT. Muốn đo thêm, dùng Chế độ QA trên phiếu CAPA.");
+  if (prev?.[0]?.final_result === "PASS") throw new Error("Lô đã kiểm lại ĐẠT. ");
   const { data: rd } = await db.from("inspection_readings").select("*").eq("plan_id", parentId).order("sample_no");
   const base = (rd ?? []) as ReadingRow[];
   if (!base.length) throw new Error("Không tìm thấy thùng mẫu của lô gốc.");

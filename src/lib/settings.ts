@@ -2,6 +2,7 @@ import "server-only";
 import { supabaseAdmin } from "./supabase/admin";
 import type { Settings } from "./types";
 import { todayVN } from "./dates";
+import { EMAIL_DEFAULTS } from "./email/defaults";
 
 export async function loadSettings(): Promise<Settings> {
   const { data, error } = await supabaseAdmin().from("settings").select("*").eq("id", 1).single();
@@ -12,6 +13,9 @@ export async function loadSettings(): Promise<Settings> {
   if (s.email_trigger !== "AFTER_IMPORT") s.email_trigger = "CRON";
   if (!Array.isArray(s.email_send_days)) s.email_send_days = [1, 2, 3, 4, 5, 6];
   if (typeof s.email_notify_ahead !== "boolean") s.email_notify_ahead = true;
+  if (!s.email_subject_tpl) s.email_subject_tpl = EMAIL_DEFAULTS.subject;
+  if (s.email_intro == null) s.email_intro = EMAIL_DEFAULTS.intro;
+  if (s.email_signature == null) s.email_signature = EMAIL_DEFAULTS.signature;
   return s;
 }
 

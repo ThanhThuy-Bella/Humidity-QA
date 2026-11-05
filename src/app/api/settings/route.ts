@@ -23,6 +23,17 @@ export const PUT = handle(async (req: Request) => {
   if (upd.sample_rate !== undefined && (Number(upd.sample_rate) <= 0 || Number(upd.sample_rate) > 1))
     throw new Error("Tỷ lệ mẫu phải trong (0, 1] – ví dụ 0.02");
   for (const k of TXT) if (k in b) upd[k] = String(b[k] ?? "").trim();
+  if ("email_subject_tpl" in b) {
+    const v = String(b.email_subject_tpl ?? "").replace(/[\r\n]+/g, " ").trim();
+    if (!v) throw new Error("Tiêu đề email không được để trống");
+    if (v.length > 200) throw new Error("Tiêu đề email tối đa 200 ký tự");
+    upd.email_subject_tpl = v;
+  }
+  for (const k of ["email_intro", "email_signature"] as const) if (k in b) {
+    const v = String(b[k] ?? "").replace(/\r\n/g, "\n").trim();
+    if (v.length > 2000) throw new Error("Nội dung email tối đa 2000 ký tự");
+    upd[k] = v;
+  }
   if ("plan_date_override" in b) upd.plan_date_override = b.plan_date_override || null;
   if ("email_enabled" in b) upd.email_enabled = !!b.email_enabled;
   if ("email_skip_empty" in b) upd.email_skip_empty = !!b.email_skip_empty;

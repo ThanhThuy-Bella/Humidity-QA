@@ -90,26 +90,25 @@ export default async function HomePage() {
 
       <div className="flex items-baseline gap-3 mb-2">
         <h2 className="text-lg font-semibold text-teal-dark">Lô cần kiểm hôm nay</h2>
-        <span className="text-xs text-mute">Bấm vào JO để mở form nhập số đo</span>
+        <span className="text-xs text-mute">Công nhân nhập số đo trên app điện thoại (quét QR)</span>
       </div>
       <div className="card overflow-x-auto mb-8">
         <table className="tbl">
           <thead><tr>
             <th>Ngày kiểm</th><th>Ưu tiên</th><th>Brand</th><th>JO</th><th>Buyer PO</th>
             <th className="num">Thùng</th><th className="num">Mẫu</th><th className="num">Đã đo</th>
-            <th>Kết quả</th><th>Vị trí</th><th>BPO date</th><th>Loại</th><th>PlanID</th><th></th>
+            <th>Kết quả</th><th>Vị trí</th><th>BPO date</th><th>Loại</th><th>PlanID</th>
           </tr></thead>
           <tbody>
-            {due.length === 0 && <tr><td colSpan={14} className="text-mute py-6 text-center">Không còn lô nào cần kiểm đến hôm nay.</td></tr>}
+            {due.length === 0 && <tr><td colSpan={13} className="text-mute py-6 text-center">Không còn lô nào cần kiểm đến hôm nay.</td></tr>}
             {due.map((p) => (
               <tr key={p.plan_id}>
                 <td>{fmtDate(p.sched_date)}</td><td><Priority p={p.priority} /></td><td>{p.brand_code}</td>
-                <td><Link className="font-semibold text-teal-dark hover:underline" href={`/inspect?lot=${encodeURIComponent(p.plan_id)}`}>{p.jo}</Link></td>
+                <td className="font-semibold">{p.jo}</td>
                 <td>{p.buyer_po}</td><td className="num">{n0(p.cartons)}</td><td className="num">{p.sample_cartons}</td><td className="num">{p.cartons_tested}</td>
                 <td><ResultBadge r={p.lot_result} /></td>
                 <td className="max-w-[160px] truncate" title={p.locations ?? ""}>{p.locations}</td>
                 <td>{fmtDate(p.bpo_date)}</td><td className="whitespace-nowrap"><TriggerText t={p.trigger} /></td><td className="text-mute">{p.plan_id}</td>
-                <td><Link href={`/inspect?lot=${encodeURIComponent(p.plan_id)}`} className="btn h-8 px-3 whitespace-nowrap">Nhập kết quả</Link></td>
               </tr>
             ))}
           </tbody>

@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { dueLots, openPlans } from "@/lib/queries";
-import { fmtDate, todayVN } from "@/lib/dates";
+import { addDays, fmtDate, todayVN } from "@/lib/dates";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getProfile } from "@/lib/auth";
+import ReworkButton from "@/components/ReworkButton";
 import { brandTone, lotStatus, STATUS } from "@/lib/mobileUi";
 import type { PlanView } from "@/lib/types";
 
@@ -12,7 +15,19 @@ const areasOf = (p: PlanView) => Object.keys(p.location_pallets ?? {}).filter((k
 export default async function MobileHome({ searchParams }: { searchParams: SP }) {
   const { q = "", khu = "" } = await searchParams;
   const t = todayVN();
-  const plans = await openPlans();
+  const [plans, me, { data: failRows }] = await Promise.all([
+    openPlans(),
+    getProfile(),
+    supabaseAdmin().from("inspection_history")
+      .select("plan_id,inspection_date,brand_code,jo,color,bpo,max_humidity")
+      .eq("result", "FAIL").is("rework_humidity", null).like("plan_id", "HI-%")
+      .gte("inspection_date", addDays(todayVN(), -90))
+      .order("inspection_date", { ascending: false }).limit(30),
+  ]);
+  // lô KHÔNG ĐẠT chờ tái chế – chưa có lượt kiểm lại đang mở (lượt đang mở đã nằm trong danh sách hôm nay)
+  const reworking = new Set(plans.filter((p) => p.kind === "REWORK").map((p) => p.parent_plan_id));
+  const waitRework = (failRows ?? []).filter((h) => !reworking.has(h.plan_id as string));
+  const canInspect = !!me && ["admin", "planner", "qa"].includes(me.role);
   const allDue = dueLots(plans, t);
   const areas = Array.from(new Set(allDue.flatMap(areasOf))).sort();
   const kw = q.trim().toUpperCase();
@@ -130,6 +145,34 @@ export default async function MobileHome({ searchParams }: { searchParams: SP })
           </li>
         )}
       </ul>
+
+      {waitRework.length > 0 && !kw && !khu && (
+        <section className="mt-6">
+          <h2 className="font-bold text-[#991B1B] mb-1">Lô KHÔNG ĐẠT – chờ tái chế & kiểm lại ({waitRework.length})</h2>
+          <p className="text-sm text-mute mb-2">Tái chế (phơi / sấy) xong thì bấm “Bắt đầu kiểm lại” để đo lại toàn bộ thùng mẫu.</p>
+          <ul className="space-y-3">
+            {waitRework.map((h) => {
+              const br = brandTone(String(h.brand_code ?? ""));
+              return (
+                <li key={h.plan_id as string} className="bg-white rounded-2xl p-4 shadow-sm ring-2 ring-[#FCA5A5]">
+                  <div className="flex items-start gap-3">
+                    <span className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-bold text-sm" style={{ background: br.bg, color: br.fg }}>
+                      {String(h.brand_code ?? "").slice(0, 3)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-lg font-bold break-all leading-tight">{h.jo}</div>
+                      <div className="text-sm text-mute mt-0.5 truncate">PO {h.bpo}{h.color ? ` · Màu ${h.color}` : ""}</div>
+                      <div className="text-sm mt-1"><span className="rounded-full bg-[#FEE2E2] text-[#991B1B] font-bold px-2.5 py-0.5 text-xs">KHÔNG ĐẠT {fmtDate(h.inspection_date as string, "dm")}</span>
+                        {h.max_humidity !== null && <span className="ml-2 text-[#991B1B] font-semibold">max {String(h.max_humidity).replace(".", ",")}%</span>}</div>
+                    </div>
+                  </div>
+                  {canInspect && <div className="mt-3"><ReworkButton planId={h.plan_id as string} label="Bắt đầu kiểm lại" /></div>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {later.length > 0 && !kw && !khu && (
         <>

@@ -49,6 +49,12 @@ alter table public.settings add column if not exists last_email_date date;
 alter table public.settings add column if not exists email_trigger text not null default 'CRON';
 alter table public.settings add column if not exists email_send_days int[] not null default '{1,2,3,4,5,6}';
 alter table public.settings add column if not exists email_notify_ahead boolean not null default true;
+-- v1.6: tiêu đề + lời mở đầu + chữ ký email do người dùng tự viết
+alter table public.settings add column if not exists email_subject_tpl text not null default '[Kiểm ẩm] Kế hoạch {ngay} – {so_lo} lô cần kiểm ({so_tre} trễ hạn)';
+alter table public.settings add column if not exists email_intro text not null default 'Chào các anh chị,
+Hệ thống gửi kế hoạch kiểm ẩm hôm nay. Kho vui lòng hạ thùng mẫu theo quy trình, QA đo 3 áo/thùng và nhập kết quả trên app điện thoại.';
+alter table public.settings add column if not exists email_signature text not null default 'Trân trọng,
+PPC – Tessellation Hòa Bình';
 do $$ begin
   alter table public.settings add constraint settings_email_trigger_chk check (email_trigger in ('CRON','AFTER_IMPORT'));
 exception when duplicate_object then null; end $$;

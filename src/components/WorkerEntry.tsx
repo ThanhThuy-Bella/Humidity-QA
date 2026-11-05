@@ -6,13 +6,13 @@ import ReworkButton from "./ReworkButton";
 
 /**
  * FORM NHẬP CHO CÔNG NHÂN – đi từng thùng mẫu, mỗi màn hình một việc:
- *   1. Chọn vị trí → pallet (nút to)   2. Số thùng + SL áo   3. Đo 3 áo   → Lưu → thùng tiếp
+ *   1. Số thùng + SL áo   2. Đo 3 áo   → Lưu → thùng tiếp   (v1.7: bỏ bước chọn vị trí / pallet)
  * Bàn phím số trên màn hình (bấm được khi đeo găng, có sẵn dấu phẩy).
  * Mỗi thùng lưu ngay khi bấm "Lưu thùng"; mất sóng → xếp hàng chờ gửi (lưu trên máy), tự gửi khi có mạng.
  * Không hiện các trường của QA (tái chế, ghi chú) → không ghi đè dữ liệu QA.
  */
 type Row = { sampleNo: number; location: string; pallet: string; carton: string; qty: string; r: [string, string, string] };
-type Step = "loc" | "carton" | "read" | "done";
+type Step = "carton" | "read" | "done";
 type Field = "carton" | "qty" | 0 | 1 | 2;
 
 const s2 = (v: unknown) => (v === null || v === undefined ? "" : String(v));
@@ -39,13 +39,12 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
   const [queue, setQueue] = useState<Record<number, Row>>({});
   const [worker, setWorker] = useState(defaultName);
   const [cur, setCur] = useState(() => Math.max(0, initial.findIndex((r) => !done(r))));
-  const locs = Object.keys(plan.location_pallets ?? {}).filter((l) => l !== "(trống)");
-  const startStep = (r: Row | undefined): Step => (!r ? "done" : done(r) ? "read" : !r.location && locs.length ? "loc" : !r.carton ? "carton" : "read");
+  const startStep = (r: Row | undefined): Step => (!r ? "done" : done(r) ? "read" : !r.carton ? "carton" : "read");
   const [step, setStep] = useState<Step>(() => (initial.every(done) ? "done" : startStep(initial[Math.max(0, initial.findIndex((r) => !done(r)))])));
   const [field, setField] = useState<Field>("carton");
   const [sending, setSending] = useState(false);
   const [online, setOnline] = useState(true);
-  const [result, setResult] = useState<{ res: string; capa: string | null } | null>(null);
+  const [result, setResult] = useState<{ res: string } | null>(null);
   const [err, setErr] = useState("");
   const queueRef = useRef(queue);
   queueRef.current = queue;
@@ -79,7 +78,7 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
     const d = await res.json().catch(() => ({ error: res.statusText }));
     if (res.status === 401) throw Object.assign(new Error("Hết phiên đăng nhập – số đo vẫn giữ trên máy. Đăng nhập lại rồi mở lại lô."), { keep: true });
     if (!res.ok) throw Object.assign(new Error(d.error || res.statusText), { keep: false });
-    if (d.status === "ARCHIVED") { setResult({ res: d.result, capa: d.capaNo }); setStep("done"); }
+    if (d.status === "ARCHIVED") { setResult({ res: d.result }); setStep("done"); }
     return d;
   }, [plan.plan_id, today, worker]);
 
@@ -213,10 +212,9 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
         <>
           {/* các bước */}
           <ol className="flex text-sm font-semibold border-b border-line bg-white" aria-label="Các bước">
-            {([["loc", "Vị trí"], ["carton", "Số thùng"], ["read", "Đo 3 áo"]] as const).map(([k, l], i) => (
+            {([["carton", "Số thùng"], ["read", "Đo 3 áo"]] as const).map(([k, l], i) => (
               <li key={k} className="flex-1">
-                <button onClick={() => { setStep(k); setField(k === "read" ? 0 : "carton"); }} disabled={k === "loc" && !locs.length}
-                  className={`w-full py-3 border-b-4 ${step === k ? "border-[#FACC15] text-teal-dark bg-[#F0F9FF]" : "border-transparent text-mute"}`}>
+                <button onClick={() => { setStep(k); setField(k === "read" ? 0 : "carton"); }} className={`w-full py-3 border-b-4 ${step === k ? "border-[#FACC15] text-teal-dark bg-[#F0F9FF]" : "border-transparent text-mute"}`}>
                   {i + 1}. {l}
                 </button>
               </li>
@@ -226,37 +224,10 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
           <div className="flex-1 px-4 py-4">
             <div className="text-lg font-bold mb-3">Thùng mẫu {row.sampleNo} / {rows.length}</div>
 
-            {step === "loc" && (
-              <div>
-                <p className="text-mute mb-2">Thùng kho hạ xuống ở vị trí nào?</p>
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  {locs.map((l) => (
-                    <button key={l} onClick={() => set({ location: l, pallet: "" })}
-                      className={`h-14 rounded-lg text-lg font-bold border-2 ${row.location === l ? "bg-teal border-teal text-white" : "bg-white border-line"}`}>{l}</button>
-                  ))}
-                </div>
-                {row.location && (plan.location_pallets?.[row.location] ?? []).length > 0 && (
-                  <>
-                    <p className="text-mute mb-2">Pallet</p>
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      {(plan.location_pallets[row.location] ?? []).map((p) => (
-                        <button key={p} onClick={() => { set({ pallet: p }); setStep("carton"); setField("carton"); }}
-                          className={`h-12 rounded-lg font-semibold border-2 ${row.pallet === p ? "bg-teal border-teal text-white" : "bg-white border-line"}`}>{p}</button>
-                      ))}
-                    </div>
-                  </>
-                )}
-                <button className="text-teal-dark underline text-base" onClick={() => { setStep("carton"); setField("carton"); }}>
-                  {row.location ? "Tiếp – nhập số thùng" : "Không rõ vị trí – bỏ qua"}
-                </button>
-              </div>
-            )}
-
             {step === "carton" && (
               <div className="grid grid-cols-2 gap-3">
                 <Display label="Số thùng" value={row.carton} active={field === "carton"} onClick={() => setField("carton")} />
                 <Display label="Số áo trong thùng" value={row.qty} active={field === "qty"} onClick={() => setField("qty")} />
-                {row.location && <p className="col-span-2 text-sm text-mute">Vị trí {row.location}{row.pallet ? ` – pallet ${row.pallet}` : ""}</p>}
               </div>
             )}
 
@@ -274,11 +245,10 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
 
           {/* bàn phím + nút chính, dính đáy màn hình */}
           <div className="sticky bottom-0 bg-white border-t border-line px-3 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
-            {step !== "loc" && <Keypad onKey={press} decimal={step === "read"} />}
+            <Keypad onKey={press} decimal={step === "read"} />
             <PrimaryButton step={step} row={row} limit={limit}
               onNext={() => {
-                if (step === "loc") { setStep("carton"); setField("carton"); }
-                else if (step === "carton") { if (field === "carton" && !row.qty) setField("qty"); else { setStep("read"); setField(0); } }
+                if (step === "carton") { if (field === "carton" && !row.qty) setField("qty"); else { setStep("read"); setField(0); } }
                 else saveCarton();
               }} />
             <div className="flex justify-between items-center mt-2 text-sm">
@@ -356,7 +326,7 @@ function Keypad({ onKey, decimal }: { onKey: (k: string) => void; decimal: boole
 function PrimaryButton({ step, row, limit, onNext }: { step: Step; row: Row; limit: number; onNext: () => void }) {
   const ready = done(row);
   const m = maxOf(row);
-  const label = step === "loc" ? "Tiếp" : step === "carton" ? "Tiếp – đo áo" : ready ? `Lưu thùng ${row.sampleNo}` : "Đo đủ 3 áo để lưu";
+  const label = step === "carton" ? "Tiếp – đo áo" : ready ? `Lưu thùng ${row.sampleNo}` : "Đo đủ 3 áo để lưu";
   const tone = step === "read" && ready && m !== null && m > limit ? "bg-fail" : "bg-teal";
   return (
     <button onClick={onNext} disabled={step === "read" && !ready}
@@ -367,7 +337,7 @@ function PrimaryButton({ step, row, limit, onNext }: { step: Step; row: Row; lim
 }
 
 function DoneScreen({ plan, result, pending, failCartons, total, tested, onRetry }: {
-  plan: PlanView; result: { res: string; capa: string | null } | null; pending: number; failCartons: number; total: number; tested: number; onRetry: () => void;
+  plan: PlanView; result: { res: string } | null; pending: number; failCartons: number; total: number; tested: number; onRetry: () => void;
 }) {
   const fail = result ? result.res === "FAIL" : failCartons > 0;
   const rework = plan.kind === "REWORK";
@@ -380,7 +350,7 @@ function DoneScreen({ plan, result, pending, failCartons, total, tested, onRetry
       </div>
       {result && fail && (
         <>
-          <p className="mt-4 text-center">{rework ? "Tái chế tiếp các thùng còn ẩm, sau đó đo lại toàn bộ thùng mẫu." : `Đã báo QA${result.capa ? ` (phiếu ${result.capa})` : ""}. Để riêng các thùng không đạt.`}</p>
+          <p className="mt-4 text-center">{rework ? "Tái chế tiếp các thùng còn ẩm, sau đó đo lại toàn bộ thùng mẫu." : "Để riêng các thùng không đạt và báo QA / kho đưa đi tái chế."}</p>
           <p className="mt-1 text-center text-sm text-mute">Tái chế (phơi / sấy) xong thì bấm nút dưới để đo lại toàn bộ thùng mẫu.</p>
           <div className="mt-4"><ReworkButton planId={rootId} /></div>
         </>

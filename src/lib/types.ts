@@ -31,6 +31,9 @@ export interface Settings {
   email_trigger: "CRON" | "AFTER_IMPORT";
   email_send_days: number[]; // 1 = T2 … 6 = T7
   email_notify_ahead: boolean; // báo trước 1 ngày khi có kế hoạch mới
+  email_subject_tpl: string; // tiêu đề, có biến {ngay} {so_lo} {so_tre} {ngay_mai} {so_lo_mai} {so_capa}
+  email_intro: string; // lời mở đầu (nhiều dòng)
+  email_signature: string; // chữ ký (nhiều dòng)
   last_imported_file: string | null;
   last_import_time: string | null;
 }

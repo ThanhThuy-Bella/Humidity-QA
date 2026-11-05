@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Profile, Settings } from "@/lib/types";
+import { EMAIL_DEFAULTS, EMAIL_VARS, fillVars } from "@/lib/email/defaults";
 
 async function call(url: string, method: string, body: unknown) {
   const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -70,6 +71,10 @@ export function EmailForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
   const [trigger, setTrigger] = useState(s.email_trigger);
   const [sendDays, setSendDays] = useState<number[]>(s.email_send_days.filter((d) => d >= 1 && d <= 6));
   const [ahead, setAhead] = useState(s.email_notify_ahead);
+  const [subj, setSubj] = useState(s.email_subject_tpl || EMAIL_DEFAULTS.subject);
+  const [intro, setIntro] = useState(s.email_intro ?? EMAIL_DEFAULTS.intro);
+  const [sign, setSign] = useState(s.email_signature ?? EMAIL_DEFAULTS.signature);
+  const sample = { ngay: "05/11/2026", so_lo: 18, so_tre: 2, ngay_mai: "06/11/2026", so_lo_mai: 9, so_capa: 1 };
   const [msg, setMsg] = useState("");
   async function save() {
     if (on && !sendDays.length) { setMsg("Chọn ít nhất 1 ngày gửi."); return; }
@@ -77,6 +82,7 @@ export function EmailForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
       await call("/api/settings", "PUT", {
         email_enabled: on, email_skip_empty: skip, email_recipients: to, email_cc: cc, email_days_ahead: days,
         email_trigger: trigger, email_send_days: sendDays, email_notify_ahead: ahead,
+        email_subject_tpl: subj, email_intro: intro, email_signature: sign,
       });
       setMsg("Đã lưu."); router.refresh();
     }
@@ -124,6 +130,33 @@ export function EmailForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={!canEdit} /> Không gửi vào ngày không có lô nào</label>
       <div><label className="label" htmlFor="to">Gửi tới (cách nhau bằng ;)</label><input id="to" className="input w-full" value={to} onChange={(e) => setTo(e.target.value)} disabled={!canEdit} /></div>
       <div><label className="label" htmlFor="cc">CC</label><input id="cc" className="input w-full" value={cc} onChange={(e) => setCc(e.target.value)} disabled={!canEdit} /></div>
+      <fieldset className="space-y-2 rounded-md border border-line p-3" disabled={!canEdit}>
+        <legend className="label px-1">Nội dung email</legend>
+        <div>
+          <label className="label" htmlFor="subj">Tiêu đề</label>
+          <input id="subj" className="input w-full" value={subj} onChange={(e) => setSubj(e.target.value)} maxLength={200} />
+          <p className="text-xs text-mute mt-1">Xem trước: <b className="text-ink">{fillVars(subj, sample).replace(/\s*\(0 trễ hạn\)/, "")}</b></p>
+        </div>
+        <div>
+          <label className="label" htmlFor="intro">Lời mở đầu (đầu email)</label>
+          <textarea id="intro" className="input w-full h-auto py-2" rows={4} value={intro} onChange={(e) => setIntro(e.target.value)} maxLength={2000} />
+        </div>
+        <div>
+          <label className="label" htmlFor="sign">Chữ ký (cuối email)</label>
+          <textarea id="sign" className="input w-full h-auto py-2" rows={3} value={sign} onChange={(e) => setSign(e.target.value)} maxLength={2000} />
+        </div>
+        <div className="text-xs text-mute">
+          Có thể chèn biến – hệ thống tự thay khi gửi:
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {EMAIL_VARS.map(([k, d]) => (
+              <button key={k} type="button" title={d} onClick={() => setSubj((x) => x + " " + k)}
+                className="rounded bg-teal-xl border border-teal-soft px-1.5 py-0.5 font-mono text-teal-dark">{k}</button>
+            ))}
+          </div>
+          <p className="mt-1">Bấm vào biến để chèn vào cuối tiêu đề. Ví dụ {"{so_lo}"} = số lô cần kiểm hôm nay, {"{so_tre}"} = số lô trễ hạn. Bảng danh sách lô luôn tự có trong email.</p>
+        </div>
+        <button type="button" className="text-xs underline text-teal-dark" onClick={() => { setSubj(EMAIL_DEFAULTS.subject); setIntro(EMAIL_DEFAULTS.intro); setSign(EMAIL_DEFAULTS.signature); }}>Khôi phục nội dung mặc định</button>
+      </fieldset>
       <div><label className="label" htmlFor="days">Kèm lô xếp lịch trong N ngày tới (tối thiểu: ngày gửi kế tiếp)</label><input id="days" type="number" className="input w-24" value={days} onChange={(e) => setDays(e.target.value)} disabled={!canEdit} /></div>
       <div className="flex flex-wrap gap-2">
         <a className="btn-ghost" href="/api/email/preview" target="_blank" rel="noreferrer">Xem trước email</a>

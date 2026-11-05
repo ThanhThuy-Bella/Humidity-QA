@@ -45,7 +45,6 @@ export default async function DashboardPage() {
           <KV label="Lô cần kiểm (Trigger)" value={stock.filter((l) => l.trigger).length} />
           <KV label="Kế hoạch đang mở" value={plans.length} />
           <KV label="Trễ hạn" value={plans.filter((p) => p.priority === "LATE").length} tone="fail" />
-          <KV label="CAPA đang mở" value={openCapa} tone={openCapa ? "fail" : undefined} />
         </Card>
         <Card title="Theo brand (top 14 theo số thùng tồn)">
           <div className="overflow-x-auto">

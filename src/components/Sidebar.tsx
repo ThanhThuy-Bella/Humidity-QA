@@ -4,14 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
-// Menu giữ đúng thứ tự & tên như sidebar VBA (DrawSidebar), thêm CAPA
+// Menu (v1.7: bỏ "Nhập kết quả" và "CAPA" – nhập số đo + kiểm lại làm trên app điện thoại /m)
 const NAV: { group?: string; items: { href: string; label: string }[] }[] = [
   { items: [
     { href: "/", label: "Tổng quan" },
     { href: "/plan", label: "Kế hoạch kiểm ẩm" },
-    { href: "/inspect", label: "Nhập kết quả" },
     { href: "/history", label: "Lịch sử kiểm" },
-    { href: "/capa", label: "CAPA" },
   ] },
   { group: "Kho", items: [
     { href: "/stock", label: "Tồn kho theo lô" },
