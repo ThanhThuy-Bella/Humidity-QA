@@ -23,7 +23,7 @@
 | Mobile Inspection (QR) | ✅ Xong – 2 chế độ: **form công nhân** (mặc định) + **Chế độ QA** (`?full=1`) |
 | Auto email Daily Plan | ✅ Xong (SMTP / Resend). v1.4: chọn **giờ cố định 08:00** hoặc **ngay sau khi nạp báo cáo kho**, chọn ngày gửi, cron 09:00 gửi bù, email **Báo trước** khi có lô mới |
 | Kiểm lại sau tái chế (rework) | ✅ Xong – đo **toàn bộ thùng mẫu** (chị xác nhận 21/10/2026) |
-| Deploy thật lên Supabase/Vercel | ⏳ **Chưa** – chị tự làm theo `docs/05-trien-khai.md` |
+| Deploy thật lên Supabase/Vercel | ✅ **03/11/2026 chạy được**: https://humidity-qa.vercel.app (Tổng quan hiển thị số liệu seed). Còn: email (chờ IT), macro Outlook, nạp báo cáo kho mới |
 | Thử trên điện thoại thật / email thật / Power Automate | ⏳ Chưa |
 
 ---
@@ -111,7 +111,7 @@ humidity-inspection-web/
 ├─ README.md · package.json (next 15.5.27, react 19.2.8) · package-lock.json
 ├─ next.config.ts · tailwind.config.ts (màu VBA: teal #1693B5, teal-dark #0E6F8A, pass #2E9E5B, fail #D64545, input #FFFBE6)
 ├─ vercel.json (region sin1, cron "0 1 * * 1-6" daily-plan + "0 2 * * 1-6" email-deadline) · .env.example · tsconfig.json
-├─ supabase/ migrations/0001_schema.sql · 0002_auto_mail.sql · seed.sql · seed-parts/seed-{1,2,3}-*.sql
+├─ supabase/ migrations/0001_schema.sql · 0002_auto_mail.sql · 0003_email_text.sql · seed.sql · seed-parts/seed-{1,2,3}-*.sql
 ├─ tools/outlook/ThisOutlookSession.txt (macro Outlook tự nạp báo cáo kho)
 ├─ scripts/ test-engine.ts · make-seed.ts · test-email.ts
 ├─ docs/ 01-business-rules · 02-kien-truc · 03-doi-chieu-man-hinh · 04-migration · 05-trien-khai · 06-review-va-kiem-thu · 07-huong-dan-qa-dien-thoai · email-preview-mau.html
@@ -133,6 +133,8 @@ Biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KE
 ---
 
 ## 7. Deployment status
+- **03/11/2026:** đã deploy được, `/api/health` OK (chỉ EMAIL false), admin `thuytt@esquel.com` (profiles.role admin), đăng nhập OK. Biến NEXT_PUBLIC_* phải là loại **Config** (Secret làm build nhận sai giá trị).
+- **02/11/2026:** Supabase project `kiem-am-thv` tạo nhầm eu-west-1 → chị xoá, tạo lại ở **Singapore**: ref `hvefyrzfzfabupnfaqqr` (ap-southeast-1, org ThanhThuy-QA, Free, dùng khoá mới sb_publishable_ / sb_secret_). `vercel.json` giữ `sin1`. GitHub repo `ThanhThuy-Bella/Humidity-QA` (upload web; có thừa `middleware.ts` + `tsconfig.tsbuildinfo` ở gốc – vô hại). Vercel project `humidity-qa` → `https://humidity-qa.vercel.app`. Email: dùng mail công ty O365, chờ IT bật SMTP AUTH.
 - **Chưa deploy.** Claude không có quyền/kết nối Supabase, Vercel; chỉ build và chạy `next start` cục bộ với env giả.
 - Đã kiểm: `next build` OK; route `/login` 200; `/m/lot/...` chưa login → 307 `/login?next=…`; `/api/qr/<id>` SVG; cron/webhook/API sai quyền → 401; `/api/health` trả rõ thiếu gì.
 - Các bước: `docs/05-trien-khai.md` (Supabase Singapore → chạy schema → seed → tạo admin Auto Confirm → tắt sign-up → GitHub upload → Vercel import + env → `/api/health` ok → Site URL → email → Power Automate).
@@ -149,6 +151,8 @@ Biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KE
 | B4 | Chạy lại seed tạo thêm 1 dòng `warehouse_imports` source=seed | Thấp | vô hại |
 | B5 | Không có khóa chống 2 lần nạp báo cáo kho chạy đồng thời (webhook + upload) | Thấp | |
 | B6 | `/api/health` công khai (lộ số dòng lịch sử/store) | Thấp | |
+| B9 | Vercel lần deploy đầu: 500 MIDDLEWARE_INVOCATION_FAILED (Edge) dù đủ env; local chạy được. Sửa v1.4.1: `src/middleware.ts` chạy `runtime: "nodejs"`, matcher bỏ `/api/`, try/catch fail-open (layout vẫn requireUser) | Cao | Chờ chị cập nhật file trên GitHub và xác nhận |
+| B10 | Trang có `ActionButton` (Tổng quan, Kế hoạch, Nạp báo cáo, Lịch sử, Cài đặt) lỗi 500 "Functions cannot be passed directly to Client Components" do truyền prop `render` (hàm) từ Server Component. Sửa v1.4.1: prop `result` = 'plan'|'capa'|'email'|'resend', định dạng trong ActionButton. **Không bao giờ truyền hàm từ page server sang component client.** Trang login hiện lỗi thật thay vì luôn 'Sai email hoặc mật khẩu' | Cao | Đã sửa, đã deploy 03/11 – OK |
 | B8 | Môi trường Claude không chụp được màn hình (không tải được Chromium) | – | Dùng Visualizer để xem trước UI |
 
 ---
@@ -170,6 +174,11 @@ Biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KE
 - **Sau mỗi thay đổi:** cập nhật file này (mục 1, 2, 3, 8, 9 và ngày cập nhật), đóng gói zip (loại `node_modules`, `.next`), `present_files`.
 
 ## Nhật ký phiên bản
+- **v1.7.1 (05/11/2026)** – file đính kèm email đổi tên `HUMIDITY_CHECKING_PLAN_dd-mm-yyyy.xlsx` (biểu mẫu lô cần kiểm hôm nay). Nội dung chị chốt: tiêu đề `HUMIDITY CHECKING PLAN - {ngay}`; lời mở đầu gửi A.Hòa (hạ thùng trước 9h) + C.Tươi (dán lại thùng sau kiểm) – đặt bằng SQL update settings hoặc Cài đặt → Email.
+- **v1.7 (05/11/2026)** – theo yêu cầu chị: (1) form công nhân **bỏ bước Vị trí/Pallet** – còn 2 bước Số thùng+SL áo → Đo 3 áo; (2) web máy tính **bỏ menu "Nhập kết quả" và "CAPA"**, bỏ nút Nhập kết quả/link JO ở Tổng quan & Kế hoạch, bỏ cột CAPA ở Lịch sử (thay bằng cột Trạng thái: Chờ tái chế / Đang kiểm lại / Đạt sau tái chế), bỏ CAPA khỏi email & Dashboard; **không tự tạo CAPA** nữa (`CAPA_ENABLED=false` trong process.ts, trang /capa vẫn còn nhưng ẩn); (3) **Kiểm lại khi FAIL**: app /m có mục "Lô KHÔNG ĐẠT – chờ tái chế & kiểm lại" (FAIL 90 ngày, chưa có rework_humidity, chưa có lượt REWORK mở) với nút "Bắt đầu kiểm lại"; Lịch sử nút Kiểm lại mở form điện thoại.
+- **v1.6 (05/11/2026)** – Cài đặt → Email: chị tự viết **tiêu đề** (biến {ngay} {so_lo} {so_tre} {ngay_mai} {so_lo_mai} {so_capa}), **lời mở đầu**, **chữ ký**. Cột mới `settings.email_subject_tpl / email_intro / email_signature` – `0003_email_text.sql` (đã gộp vào 0001); `src/lib/email/defaults.ts`; nếu DB chưa có cột thì dùng mặc định. "(0 trễ hạn)" tự bỏ khỏi tiêu đề.
+- **v1.5.1 (05/11/2026)** – sửa lỗi nạp báo cáo kho thật `bao-cao_2026-11-05.xlsx` ("Cannot read properties of undefined (reading 'length')"): file WMS có ô **không có toạ độ r="A1"** + sharedStrings nằm sau sheet → exceljs (streaming lẫn full) đều lỗi. `parseWarehouse.ts` thêm **bộ đọc XML riêng (JSZip + regex) làm chính**, exceljs làm dự phòng. Thử file thật: 49.359 UCC, 46.456 thùng sau lọc 3 store, 710 lô, 2,5 giây.
+- **v1.5 (04/11/2026)** – giao diện điện thoại nhiều màu: header teal-dark + nút Quét QR vàng, thẻ tổng quan (trễ/đang đo/chưa đo), thẻ lô có màu brand (`src/lib/mobileUi.ts`), pill trạng thái màu, nút "Nhập"; WorkerEntry header teal + nút quay lại danh sách. Thẻ lô + header form hiện **Màu (plan.color)**. QR chung vào app: `/m` (file QR_App_Kiem_Am_A4.pdf) – chị KHÔNG dùng tem QR dán thùng.
 - **v1.4 (02/11/2026)** – email tự động: chọn thời điểm (08:00 / sau khi nạp báo cáo kho) + ngày gửi T2–T7 + báo trước 1 ngày khi có kế hoạch mới, cron 09:00 gửi bù, nút gửi ở Tổng quan, nút Nhập kết quả ở bảng lô; docs/05 tải GitHub 2 lần. `tsc` 0 lỗi, `next build` OK, schema+seed chạy 2 lần trên PG16 OK.
 - **v1.0 (20/10/2026)** – dựng toàn bộ app, schema, seed, docs, build OK.
 - **v1.1 (20/10/2026)** – review 15 lỗi, hoàn thiện Mobile Inspection + Email, nâng Next/React vá bảo mật.
