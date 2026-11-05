@@ -37,32 +37,59 @@ export async function buildDailyEmail(s: Settings) {
 
 type Mail = { to: string[]; cc?: string[]; subject: string; html: string; text: string; attachment?: Buffer; fileName?: string };
 
-/** Gửi qua SMTP (Office 365 / Gmail) hoặc Resend – chọn bằng EMAIL_PROVIDER */
+export type SmtpConf = { provider: string; host: string; port: number; secure: boolean; user: string; pass: string; from: string; source: "env" | "db" };
+
+/**
+ * Cấu hình hộp thư gửi. v1.8: ưu tiên biến môi trường Vercel; nếu chưa có thì đọc bảng `mail_secret`
+ * (Supabase, chỉ server đọc được – RLS bật, không có policy) → chị cài bằng SQL, không cần đụng Vercel.
+ */
+export async function smtpConfig(): Promise<SmtpConf | null> {
+  const e = process.env;
+  if (e.SMTP_HOST || e.RESEND_API_KEY) {
+    return {
+      provider: e.EMAIL_PROVIDER ?? "smtp", host: e.SMTP_HOST ?? "", port: Number(e.SMTP_PORT ?? 587),
+      secure: e.SMTP_SECURE === "true", user: e.SMTP_USER ?? "", pass: e.SMTP_PASS ?? "",
+      from: e.MAIL_FROM ?? e.SMTP_USER ?? "", source: "env",
+    };
+  }
+  try {
+    const { data } = await supabaseAdmin().from("mail_secret").select("*").eq("id", 1).maybeSingle();
+    if (data?.smtp_host) {
+      return {
+        provider: "smtp", host: String(data.smtp_host).trim(), port: Number(data.smtp_port ?? 587),
+        secure: !!data.smtp_secure, user: String(data.smtp_user ?? "").trim(), pass: String(data.smtp_pass ?? ""),
+        from: String(data.mail_from || data.smtp_user || "").trim(), source: "db",
+      };
+    }
+  } catch { /* bảng chưa tạo */ }
+  return null;
+}
+
+/** Gửi qua SMTP (Office 365 / Gmail) hoặc Resend */
 async function deliver(m: Mail) {
-  const from = process.env.MAIL_FROM ?? process.env.SMTP_USER ?? "";
-  if (!from) throw new Error("Chưa cấu hình MAIL_FROM.");
-  if ((process.env.EMAIL_PROVIDER ?? "smtp") === "resend") {
+  const c = await smtpConfig();
+  if (!c) throw new Error("Chưa cấu hình hộp thư gửi (chạy SQL mail_secret trong Supabase hoặc thêm biến SMTP_* trên Vercel).");
+  if (!c.from) throw new Error("Chưa cấu hình MAIL_FROM.");
+  if (c.provider === "resend") {
     if (!process.env.RESEND_API_KEY) throw new Error("Chưa cấu hình RESEND_API_KEY.");
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, html: m.html, text: m.text,
+        from: c.from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, html: m.html, text: m.text,
         attachments: m.attachment ? [{ filename: m.fileName, content: m.attachment.toString("base64") }] : undefined,
       }),
     });
     if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
     return;
   }
-  if (!process.env.SMTP_HOST) throw new Error("Chưa cấu hình SMTP_HOST.");
+  if (!c.host) throw new Error("Chưa cấu hình SMTP_HOST.");
   const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+    host: c.host, port: c.port, secure: c.secure,
+    auth: c.user ? { user: c.user, pass: c.pass } : undefined,
   });
   await transport.sendMail({
-    from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, html: m.html, text: m.text,
+    from: c.from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, html: m.html, text: m.text,
     attachments: m.attachment ? [{ filename: m.fileName, content: m.attachment }] : [],
   });
 }

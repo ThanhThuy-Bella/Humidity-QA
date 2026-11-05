@@ -379,3 +379,17 @@ create policy "profile_self_or_admin" on public.profiles for select to authentic
 insert into storage.buckets (id, name, public)
 values ('imports', 'imports', false)
 on conflict (id) do nothing;
+
+-- v1.8: hộp thư gửi email (chỉ server đọc)
+create table if not exists public.mail_secret (
+  id          int primary key default 1 check (id = 1),
+  smtp_host   text not null default 'smtp.office365.com',
+  smtp_port   int  not null default 587,
+  smtp_secure boolean not null default false,
+  smtp_user   text not null default '',
+  smtp_pass   text not null default '',
+  mail_from   text not null default '',
+  updated_at  timestamptz not null default now()
+);
+alter table public.mail_secret enable row level security;
+revoke all on public.mail_secret from anon, authenticated;

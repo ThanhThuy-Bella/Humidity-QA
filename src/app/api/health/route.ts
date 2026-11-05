@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { smtpConfig } from "@/lib/email/dailyPlan";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,10 @@ export async function GET() {
     NEXT_PUBLIC_APP_URL: !!process.env.NEXT_PUBLIC_APP_URL,
     CRON_SECRET: !!process.env.CRON_SECRET,
     IMPORT_WEBHOOK_SECRET: !!process.env.IMPORT_WEBHOOK_SECRET,
-    EMAIL: process.env.EMAIL_PROVIDER === "resend" ? !!process.env.RESEND_API_KEY : !!process.env.SMTP_HOST,
+    EMAIL: false,
   };
+  const mail = await smtpConfig().catch(() => null);
+  env.EMAIL = !!mail;
   let db: Record<string, unknown> = {};
   try {
     const a = supabaseAdmin();
@@ -28,5 +31,5 @@ export async function GET() {
     db = { error: e instanceof Error ? e.message : String(e) };
   }
   const ok = Object.values(env).every(Boolean) && db.schema === true && db.bucket_imports === true;
-  return NextResponse.json({ ok, env, db }, { status: ok ? 200 : 503 });
+  return NextResponse.json({ ok, env, db, mail: mail ? { source: mail.source, host: mail.host } : null }, { status: ok ? 200 : 503 });
 }
