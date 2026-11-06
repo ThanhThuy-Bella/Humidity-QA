@@ -255,6 +255,16 @@ export async function runImport(
       message: `Báo cáo ${fileName} đã được nạp trước đó.`,
     };
   }
+  // v1.8.1: không cho báo cáo CŨ HƠN báo cáo đang dùng ghi đè tồn kho (macro Outlook quét bù mail các ngày trước)
+  const newDate = dateFromName(fileName);
+  const curDate = s.last_imported_file ? dateFromName(s.last_imported_file) : null;
+  if (!force && newDate && curDate && newDate < curDate) {
+    return {
+      fileName, reportDate: newDate, cartonsImported: 0, includedCartons: 0, stockLots: 0, archived: 0,
+      newTasks: 0, rescheduled: 0, removed: 0, sampleRows: 0, newBrands: [], newStores: [], skipped: true,
+      message: `Bỏ qua ${fileName}: cũ hơn báo cáo đang dùng (${s.last_imported_file}).`,
+    };
+  }
   const parsed = await parseWarehouseReport(buffer, s.warehouse_sheet);
   if (parsed.cartons.length === 0) throw new Error("Báo cáo kho không có dòng dữ liệu nào – kiểm tra lại file.");
 

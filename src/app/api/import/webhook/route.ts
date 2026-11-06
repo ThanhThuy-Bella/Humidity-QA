@@ -42,7 +42,7 @@ export const POST = handle(async (req: Request) => {
   if (!fileName || !dateFromName(fileName)) fileName = `bao-cao_${dateFromName(subject) ?? todayVN()}.xlsx`;
   try {
     const result = await runImport(db, await loadSettings(), buf, fileName, "webhook", null, false);
-    const email = await sendAfterImport();
+    const email = result.skipped ? { skipped: "Không nạp báo cáo mới" } : await sendAfterImport();
     return NextResponse.json({ ...result, email });
   } finally {
     if (storagePath) await db.storage.from("imports").remove([storagePath]);
