@@ -16,6 +16,8 @@ export async function loadSettings(): Promise<Settings> {
   if (!s.email_subject_tpl) s.email_subject_tpl = EMAIL_DEFAULTS.subject;
   if (s.email_intro == null) s.email_intro = EMAIL_DEFAULTS.intro;
   if (s.email_signature == null) s.email_signature = EMAIL_DEFAULTS.signature;
+  if (!Number.isInteger(s.insp_wave_weekday) || s.insp_wave_weekday < 1 || s.insp_wave_weekday > 6) s.insp_wave_weekday = 1;
+  if (typeof s.max_cartons_per_day !== "number" || s.max_cartons_per_day < 0) s.max_cartons_per_day = 40;
   return s;
 }
 

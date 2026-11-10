@@ -11,7 +11,7 @@ import ReworkButton from "./ReworkButton";
  * Mỗi thùng lưu ngay khi bấm "Lưu thùng"; mất sóng → xếp hàng chờ gửi (lưu trên máy), tự gửi khi có mạng.
  * Không hiện các trường của QA (tái chế, ghi chú) → không ghi đè dữ liệu QA.
  */
-type Row = { sampleNo: number; location: string; pallet: string; carton: string; qty: string; r: [string, string, string] };
+type Row = { sampleNo: number; color: string; location: string; pallet: string; carton: string; qty: string; r: [string, string, string] };
 type Step = "carton" | "read" | "done";
 type Field = "carton" | "qty" | 0 | 1 | 2;
 
@@ -31,7 +31,7 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
   plan: PlanView; readings: ReadingRow[]; limit: number; today: string; defaultName: string;
 }) {
   const initial = useMemo<Row[]>(() => [...readings].sort((a, b) => a.sample_no - b.sample_no).map((x) => ({
-    sampleNo: x.sample_no, location: s2(x.location), pallet: s2(x.pallet), carton: s2(x.audit_carton_no), qty: s2(x.qty_in_carton),
+    sampleNo: x.sample_no, color: s2(x.color), location: s2(x.location), pallet: s2(x.pallet), carton: s2(x.audit_carton_no), qty: s2(x.qty_in_carton),
     r: [s2(x.r1), s2(x.r2), s2(x.r3)],
   })), [readings]);
 
@@ -222,7 +222,10 @@ export default function WorkerEntry({ plan, readings, limit, today, defaultName 
           </ol>
 
           <div className="flex-1 px-4 py-4">
-            <div className="text-lg font-bold mb-3">Thùng mẫu {row.sampleNo} / {rows.length}</div>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-lg font-bold">Thùng mẫu {row.sampleNo} / {rows.length}</span>
+              {row.color && <span className="rounded-lg bg-[#FFF7ED] text-[#9A3412] border border-[#FDBA74] px-2.5 py-1 text-base font-bold">Lấy thùng màu {row.color}</span>}
+            </div>
 
             {step === "carton" && (
               <div className="grid grid-cols-2 gap-3">

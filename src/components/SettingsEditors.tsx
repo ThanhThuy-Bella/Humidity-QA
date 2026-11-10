@@ -13,15 +13,17 @@ async function call(url: string, method: string, body: unknown) {
 
 const FIELDS: { k: keyof Settings; l: string; note: string; type?: string }[] = [
   { k: "hum_limit", l: "Ngưỡng độ ẩm (%) – PASS nếu ≤", note: "Chuẩn ISO" },
-  { k: "sample_rate", l: "Tỷ lệ thùng mẫu (0.02 = 2%)", note: "Mẫu = ROUNDUP(Thùng × tỷ lệ)" },
+  { k: "sample_rate", l: "Tỷ lệ thùng mẫu (0.02 = 2%)", note: "Mẫu = max(ROUNDUP(Thùng × tỷ lệ), số màu) – mỗi màu ≥ 1 thùng" },
   { k: "readings_per_carton", l: "Số đo / thùng (áo)", note: "Cố định 3 áo / thùng" },
   { k: "rain_start", l: "Mùa mưa – từ tháng", note: "Tháng 5–10" },
   { k: "rain_end", l: "Mùa mưa – đến tháng", note: "Tháng 11–4 là mùa khô" },
   { k: "iso_weeks_rain", l: "ISO tồn tối thiểu – mùa mưa (tuần)", note: "Tính đến NGÀY KIỂM" },
   { k: "iso_weeks_dry", l: "ISO tồn tối thiểu – mùa khô (tuần)", note: "Mùa theo tháng của ngày kiểm" },
-  { k: "preship_earliest", l: "Kiểm trước BPO date (ngày)", note: "Ngày kiểm = BPO − 7" },
+  { k: "preship_earliest", l: "Kiểm trước BPO date (ngày)", note: "Hạn kiểm = BPO − 10 → xếp vào đợt kiểm gần nhất trước hạn" },
+  { k: "insp_wave_weekday", l: "Ngày đợt kiểm trong tuần", note: "1 = Thứ 2 … 6 = Thứ 7" },
+  { k: "max_cartons_per_day", l: "Số thùng mẫu tối đa / ngày", note: "Vượt → dời sang ngày làm việc sau (0 = không giới hạn)" },
   { k: "preship_deadline", l: "Hạn chót trước BPO date (ngày)", note: "Quá BPO − 5 → Trễ hạn" },
-  { k: "plan_lookahead", l: "Lập lịch cho BPO date trong (ngày)", note: "Chỉ lô có BPO trong 14 ngày tới" },
+  { k: "plan_lookahead", l: "Lập lịch cho BPO date trong (ngày)", note: "Tự nâng tối thiểu = (Kiểm trước BPO) + 7" },
   { k: "plan_date_override", l: "Plan date cố định", note: "Trống = hôm nay (nên để trống)", type: "date" },
   { k: "grade_filter", l: "Grade lấy từ báo cáo kho", note: "Trống = mọi grade", type: "text" },
   { k: "warehouse_sheet", l: "Sheet báo cáo kho", note: "FGs_Report", type: "text" },
@@ -56,7 +58,7 @@ export function ParamsForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
 }
 
 const TRIGGERS = [
-  { v: "CRON" as const, title: "Giờ cố định – 08:00 mỗi sáng", desc: "Lập lại kế hoạch theo ngày mới rồi gửi. Đổi giờ: sửa vercel.json (giờ UTC = giờ VN − 7)." },
+  { v: "CRON" as const, title: "Giờ cố định – 08:00 các ngày gửi (khuyên dùng: chỉ Thứ 7)", desc: "Thứ 7 gửi plan cho đợt kiểm Thứ 2 tuần sau (gồm lô dời sang T3… do quá tải). Đổi giờ: sửa vercel.json (giờ UTC = giờ VN − 7)." },
   { v: "AFTER_IMPORT" as const, title: "Ngay sau khi nạp Daily Stock Report", desc: "Nạp báo cáo kho (upload hoặc Power Automate) xong là gửi. Đến 09:00 vẫn chưa có báo cáo → gửi bù kèm cảnh báo." },
 ];
 const DAY_LABELS: [number, string][] = [[1, "T2"], [2, "T3"], [3, "T4"], [4, "T5"], [5, "T6"], [6, "T7"]];
@@ -122,9 +124,8 @@ export function EmailForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
         </div>
         <label className="flex gap-3 items-start text-sm">
           <input type="checkbox" className="mt-1" checked={ahead} onChange={(e) => setAhead(e.target.checked)} />
-          <span><span className="font-semibold block">Gửi trước kế hoạch 1 ngày khi có kế hoạch mới</span>
-            <span className="text-mute text-xs">Email hằng ngày luôn có mục “Báo trước – kế hoạch ngày mai” (Thứ 7 báo cho Thứ 2), lô mới gắn nhãn MỚI.
-              Nếu sau giờ gửi lại nạp báo cáo kho và phát sinh lô mới → tự gửi thêm email “Báo trước” chỉ gồm các lô mới đó.</span></span>
+          <span><span className="font-semibold block">Gửi PLAN BỔ SUNG khi có lô gấp</span>
+            <span className="text-mute text-xs">Lô mới không kịp chờ đợt kiểm của email tuần (BPO − 10 rơi trước đợt kế tiếp) → nạp báo cáo kho xong tự gửi email “HUMIDITY CHECKING PLAN BỔ SUNG” kèm file plan.</span></span>
         </label>
       </fieldset>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={!canEdit} /> Không gửi vào ngày không có lô nào</label>

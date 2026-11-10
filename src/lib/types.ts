@@ -34,6 +34,8 @@ export interface Settings {
   email_subject_tpl: string; // tiêu đề, có biến {ngay} {so_lo} {so_tre} {ngay_mai} {so_lo_mai} {so_capa}
   email_intro: string; // lời mở đầu (nhiều dòng)
   email_signature: string; // chữ ký (nhiều dòng)
+  insp_wave_weekday: number; // v1.9: ngày đợt kiểm trong tuần (1 = T2)
+  max_cartons_per_day: number; // v1.9: số thùng mẫu tối đa / ngày (0 = không giới hạn)
   last_imported_file: string | null;
   last_import_time: string | null;
 }
@@ -84,6 +86,7 @@ export interface StockLot {
   bpo_date: string | null;
   stock_in_date: string | null;
   stores: string;
+  color_cartons?: Record<string, number>; // v1.9: số thùng theo màu
 }
 
 export type BpoStatus = "NO BPO" | "OVERDUE" | "DUE" | "LATER";
@@ -131,6 +134,7 @@ export interface PlanRow {
   cancel_reason: string | null;
   kind: "NORMAL" | "REWORK";
   parent_plan_id: string | null;
+  sample_colors?: Record<string, number> | null; // v1.9: số thùng mẫu theo màu
   created_at: string;
 }
 
@@ -158,6 +162,7 @@ export interface ReadingRow {
   pallet: string | null;
   audit_carton_no: string | null;
   qty_in_carton: string | null;
+  color?: string | null; // v1.9: màu của thùng mẫu
   r1: number | null;
   r2: number | null;
   r3: number | null;

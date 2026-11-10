@@ -7,6 +7,7 @@ import { dueLots, openPlans } from "../queries";
 import { exportForm, toBuffer } from "../excel/export";
 import { supabaseAdmin } from "../supabase/admin";
 import { buildDailyEmailContent, buildNoticeEmailContent, isNewLot, nextSendDay } from "./template";
+import { waveOnOrAfter } from "../engine/rules";
 
 /** Lần gửi thành công gần nhất (email ngày hoặc báo trước) – mốc đánh dấu lô MỚI */
 async function lastSentAt(): Promise<string | null> {
@@ -30,9 +31,9 @@ export async function buildDailyEmail(s: Settings) {
   const mail = buildDailyEmailContent({
     plans, s, today, appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, ""), openCapa: count ?? 0, lastImportDate, newSince,
   });
-  const formRows = dueLots(plans, today, false);
-  const attachment = await toBuffer(await exportForm(formRows, s, today));
-  return { ...mail, attachment, fileName: `HUMIDITY_CHECKING_PLAN_${today.slice(8, 10)}-${today.slice(5, 7)}-${today.slice(0, 4)}.xlsx` };
+  const d = mail.target;
+  const attachment = await toBuffer(await exportForm(mail.due, s, d));
+  return { ...mail, attachment, fileName: `HUMIDITY_CHECKING_PLAN_${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}.xlsx` };
 }
 
 type Mail = { to: string[]; cc?: string[]; subject: string; html: string; text: string; attachment?: Buffer; fileName?: string };
@@ -154,33 +155,36 @@ export function lastImportDateVN(s: Settings): string | null {
 }
 
 /**
- * "Gửi trước kế hoạch 1 ngày khi có kế hoạch mới":
- * email ngày hôm nay đã gửi, sau đó nạp báo cáo kho tạo thêm lô cần kiểm đến ngày gửi kế tiếp
- * → gửi email Báo trước chỉ gồm các lô mới đó. (Trước khi gửi email ngày thì email ngày đã gồm sẵn.)
+ * v1.9 – PLAN BỔ SUNG: sau khi nạp báo cáo kho, lô MỚI (tạo sau lần gửi gần nhất) có ngày kiểm TRƯỚC đợt
+ * mà email tuần kế tiếp sẽ bao phủ → gửi ngay 1 email bổ sung kèm file plan của các lô đó.
  */
 export async function sendNewLotNotice(s: Settings) {
   const db = supabaseAdmin();
   const today = todayVN();
-  if (!s.email_notify_ahead) return { skipped: "Không bật báo trước kế hoạch mới" };
-  if (s.last_email_date !== today) return { skipped: "Chưa gửi email ngày – email ngày sẽ gồm lô mới" };
-  if (!s.email_send_days.includes(weekdayVN(today))) return { skipped: "Hôm nay không nằm trong ngày gửi" };
+  if (!s.email_notify_ahead) return { skipped: "Không bật gửi plan bổ sung" };
   const to = s.email_recipients;
   if (!to.length) return { skipped: "Chưa có người nhận" };
+  // ngày gửi email tuần kế tiếp (hôm nay nếu hôm nay là ngày gửi và chưa gửi)
+  const sendToday = s.email_send_days.includes(weekdayVN(today)) && s.last_email_date !== today;
+  const nextSend = sendToday ? today : nextSendDay(today, s.email_send_days);
+  const coveredFrom = waveOnOrAfter(nextSend, s.insp_wave_weekday ?? 1);
   const since = await lastSentAt();
-  const nextDay = nextSendDay(today, s.email_send_days);
   const lots = (await openPlans())
-    .filter((p) => p.lot_result === "PENDING" && p.sched_date <= nextDay && isNewLot(p, since))
+    .filter((p) => p.lot_result === "PENDING" && p.kind !== "REWORK" && p.sched_date < coveredFrom && isNewLot(p, since))
     .sort((a, b) => a.sched_date.localeCompare(b.sched_date) || a.brand_code.localeCompare(b.brand_code));
-  if (!lots.length) return { skipped: "Không có lô mới" };
+  if (!lots.length) return { skipped: "Không có lô gấp mới" };
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  const mail = buildNoticeEmailContent({ lots, s, today, nextDay, appUrl });
+  const first = lots[0].sched_date;
+  const mail = buildNoticeEmailContent({ lots, s, today, nextDay: first, appUrl });
+  const attachment = await toBuffer(await exportForm(lots, s, first));
+  const fileName = `HUMIDITY_CHECKING_PLAN_BO_SUNG_${first.slice(8, 10)}-${first.slice(5, 7)}-${first.slice(0, 4)}.xlsx`;
   try {
-    await deliver({ to, cc: s.email_cc, subject: mail.subject, html: mail.html, text: mail.text });
+    await deliver({ to, cc: s.email_cc, subject: mail.subject, html: mail.html, text: mail.text, attachment, fileName });
     await db.from("email_logs").insert({ kind: "NOTICE", recipients: to, subject: mail.subject, lot_count: lots.length, status: "SENT" });
     return { sent: true, notice: true, subject: mail.subject, lots: lots.length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await db.from("email_logs").insert({ kind: "NOTICE", recipients: to, subject: mail.subject, lot_count: lots.length, status: "ERROR", error: msg.slice(0, 500) });
-    return { error: "Gửi email báo trước lỗi: " + msg };
+    return { error: "Gửi plan bổ sung lỗi: " + msg };
   }
 }

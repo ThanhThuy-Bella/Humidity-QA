@@ -33,11 +33,11 @@ export async function createRework(db: SupabaseClient, _s: Settings, parentId: s
     brand_code: parent.brand_code, customer: parent.customer, jo: parent.jo, buyer_po: parent.buyer_po, style: parent.style, color: parent.color,
     locations: parent.locations, pallets: parent.pallets, location_pallets: parent.location_pallets, cartons: parent.cartons, qty: parent.qty,
     bpo_date: parent.bpo_date, stock_in_date: parent.stock_in_date, sched_date: todayVN(), trigger: "REWORK",
-    sample_cartons: base.length, status: "OPEN",
+    sample_cartons: base.length, sample_colors: parent.sample_colors ?? {}, status: "OPEN",
   });
   if (error) throw new Error(error.message);
   const { error: e2 } = await db.from("inspection_readings").insert(base.map((r, i) => ({
-    plan_id: planId, sample_no: i + 1, location: r.location, pallet: r.pallet, audit_carton_no: r.audit_carton_no, qty_in_carton: r.qty_in_carton,
+    plan_id: planId, sample_no: i + 1, color: r.color ?? null, location: r.location, pallet: r.pallet, audit_carton_no: r.audit_carton_no, qty_in_carton: r.qty_in_carton,
   })));
   if (e2) throw new Error(e2.message);
   return { planId, existed: false, cartons: base.length };

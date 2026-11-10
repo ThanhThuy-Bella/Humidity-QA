@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyProcessResult, PlanView, ReadingRow, Settings, StockLot } from "../types";
 import { fetchAll, insertChunked } from "../supabase/admin";
-import { buildStockLots, evaluateLots, planIdPrefix, sampleCartons } from "./rules";
+import { allocateColors, buildStockLots, colorSequence, evaluateLots, placeWithCapacity, planIdPrefix, sampleCartons } from "./rules";
 import { parseWarehouseReport } from "./parseWarehouse";
 import { dateFromName, fmtDate, todayVN } from "../dates";
 import { fmtReading, lotKey } from "../format";
@@ -52,6 +52,10 @@ export async function generatePlan(db: DB, s: Settings) {
 
   let rescheduled = 0;
   let removed = 0;
+  // tải theo ngày (số thùng mẫu còn phải đo của các lô đang mở) – cân tối đa max_cartons_per_day
+  const load = new Map<string, number>();
+  const addLoad = (d: string, n: number) => load.set(d, (load.get(d) ?? 0) + n);
+  for (const p of open) if (p.lot_result === "PENDING" || p.lot_result === "IN PROGRESS") addLoad(p.sched_date, Math.max(0, p.sample_cartons - p.cartons_tested));
   const openKeys = new Set<string>();
   const now = () => new Date().toISOString();
 
@@ -68,8 +72,11 @@ export async function generatePlan(db: DB, s: Settings) {
         continue;
       }
       if ((p.bpo_date ?? "") !== (lot.bpo_date ?? "")) {
+        addLoad(p.sched_date, -p.sample_cartons);
+        const d = placeWithCapacity(lot.sched_insp_date!, p.sample_cartons, load, s.max_cartons_per_day);
+        addLoad(d, p.sample_cartons);
         await db.from("inspection_plan").update({
-          bpo_date: lot.bpo_date, trigger: lot.trigger, sched_date: lot.sched_insp_date, updated_at: now(),
+          bpo_date: lot.bpo_date, trigger: lot.trigger, sched_date: d, updated_at: now(),
         }).eq("plan_id", p.plan_id);
         rescheduled++;
       }
@@ -93,22 +100,28 @@ export async function generatePlan(db: DB, s: Settings) {
 
   const newPlans: object[] = [];
   const newReadings: object[] = [];
+  // BPO sớm trước → được ưu tiên giữ ngày đợt khi vượt tải
   const sorted = evaluated
     .filter((l) => l.trigger)
-    .sort((a, b) => (a.sched_insp_date! + a.brand_code).localeCompare(b.sched_insp_date! + b.brand_code));
+    .sort((a, b) => (a.sched_insp_date! + (a.bpo_date ?? "") + a.brand_code).localeCompare(b.sched_insp_date! + (b.bpo_date ?? "") + b.brand_code));
   for (const l of sorted) {
     const key = lotKey(l.jo, l.buyer_po);
     if (openKeys.has(key)) continue;
     seq++;
     const planId = prefix + String(seq).padStart(3, "0");
-    const n = sampleCartons(l.cartons, s);
+    const cc = l.color_cartons ?? {};
+    const n = sampleCartons(l.cartons, s, Object.keys(cc).length);
+    const alloc = allocateColors(n, cc);
+    const colorsSeq = colorSequence(alloc);
+    const day = placeWithCapacity(l.sched_insp_date!, n, load, s.max_cartons_per_day);
+    addLoad(day, n);
     newPlans.push({
       plan_id: planId, brand_code: l.brand_code, customer: l.customer, jo: l.jo, buyer_po: l.buyer_po,
       style: l.style, color: l.colors, locations: l.locations, pallets: l.pallets, location_pallets: l.location_pallets,
       cartons: l.cartons, qty: l.qty, bpo_date: l.bpo_date, stock_in_date: l.stock_in_date,
-      sched_date: l.sched_insp_date, trigger: l.trigger, sample_cartons: n, status: "OPEN",
+      sched_date: day, trigger: l.trigger, sample_cartons: n, sample_colors: alloc, status: "OPEN",
     });
-    for (let i = 1; i <= n; i++) newReadings.push({ plan_id: planId, sample_no: i });
+    for (let i = 1; i <= n; i++) newReadings.push({ plan_id: planId, sample_no: i, color: colorsSeq[i - 1] ?? null });
     openKeys.add(key);
   }
   await insertChunked(db, "inspection_plan", newPlans);

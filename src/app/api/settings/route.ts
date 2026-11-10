@@ -4,7 +4,7 @@ import { handle } from "@/lib/api";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const NUM = ["hum_limit", "sample_rate", "readings_per_carton", "rain_start", "rain_end", "iso_weeks_rain", "iso_weeks_dry",
-  "preship_earliest", "preship_deadline", "plan_lookahead", "email_days_ahead"] as const;
+  "preship_earliest", "preship_deadline", "plan_lookahead", "email_days_ahead", "insp_wave_weekday", "max_cartons_per_day"] as const;
 const TXT = ["grade_filter", "warehouse_sheet", "mail_subject", "form_warehouse", "company_name", "company_address", "company_tel"] as const;
 
 export const PUT = handle(async (req: Request) => {
@@ -18,6 +18,8 @@ export const PUT = handle(async (req: Request) => {
   }
   for (const m of ["rain_start", "rain_end"] as const)
     if (upd[m] !== undefined && (Number(upd[m]) < 1 || Number(upd[m]) > 12)) throw new Error("Tháng phải từ 1 đến 12");
+  if (upd.insp_wave_weekday !== undefined && (!Number.isInteger(upd.insp_wave_weekday) || Number(upd.insp_wave_weekday) < 1 || Number(upd.insp_wave_weekday) > 6))
+    throw new Error("Ngày đợt kiểm: 1 = Thứ 2 … 6 = Thứ 7");
   if (upd.readings_per_carton !== undefined && Number(upd.readings_per_carton) !== 3)
     throw new Error("Hiện form nhập hỗ trợ đúng 3 số đo / thùng");
   if (upd.sample_rate !== undefined && (Number(upd.sample_rate) <= 0 || Number(upd.sample_rate) > 1))
