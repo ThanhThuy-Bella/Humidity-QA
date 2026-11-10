@@ -94,7 +94,7 @@ export function EmailForm({ s, canEdit }: { s: Settings; canEdit: boolean }) {
     setMsg("Đang gửi…");
     try {
       const d = await call("/api/email/test", "POST", body);
-      setMsg(d.sent ? `Đã gửi: ${d.subject}${d.stale ? " (cảnh báo: báo cáo kho chưa cập nhật)" : ""}` : `Không gửi: ${d.reason}`);
+      setMsg(d.sent ? `${d.queued ? "Đã xếp hàng – Outlook (máy chạy macro) sẽ gửi trong vài phút" : "Đã gửi"}: ${d.subject}${d.stale ? " (cảnh báo: báo cáo kho chưa cập nhật)" : ""}` : `Không gửi: ${d.reason}`);
       router.refresh();
     } catch (e) { setMsg((e as Error).message); }
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { smtpConfig } from "@/lib/email/dailyPlan";
+import { mailVia, smtpConfig } from "@/lib/email/dailyPlan";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +15,9 @@ export async function GET() {
     IMPORT_WEBHOOK_SECRET: !!process.env.IMPORT_WEBHOOK_SECRET,
     EMAIL: false,
   };
+  const via = await mailVia().catch(() => "OUTLOOK" as const);
   const mail = await smtpConfig().catch(() => null);
-  env.EMAIL = !!mail;
+  env.EMAIL = via === "OUTLOOK" || !!mail;
   let db: Record<string, unknown> = {};
   try {
     const a = supabaseAdmin();
@@ -31,5 +32,5 @@ export async function GET() {
     db = { error: e instanceof Error ? e.message : String(e) };
   }
   const ok = Object.values(env).every(Boolean) && db.schema === true && db.bucket_imports === true;
-  return NextResponse.json({ ok, env, db, mail: mail ? { source: mail.source, host: mail.host } : null }, { status: ok ? 200 : 503 });
+  return NextResponse.json({ ok, env, db, mail: { via, smtp: mail ? { source: mail.source, host: mail.host } : null } }, { status: ok ? 200 : 503 });
 }

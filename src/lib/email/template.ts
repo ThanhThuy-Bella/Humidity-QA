@@ -151,8 +151,13 @@ export function buildDailyEmailContent({ plans, s, today, appUrl, openCapa, last
     ...(sign ? ["", fillVars(sign, vars)] : []),
   ].join("\n");
 
+  if (s.email_via !== "SMTP") return { subject, html: plainHtml(para(intro), sign ? para(sign) : ""), text, due, upcoming, target, nextDay, nextDayLots, later, late, stale };
   return { subject, html, text, due, upcoming, target, nextDay, nextDayLots, later, late, stale };
 }
+
+/** v1.11: mail gửi qua Outlook – giống mail chị gửi tay: chỉ lời chào + (chữ ký trong Cài đặt nếu có); Outlook tự thêm chữ ký */
+const plainHtml = (body: string, sign: string) =>
+  `<div style="font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#000">${body}${sign ? `<br><br>${sign}` : ""}</div>`;
 
 /**
  * Email "Báo trước kế hoạch mới": gửi khi nạp báo cáo kho SAU lúc đã gửi email ngày hôm nay
@@ -163,7 +168,7 @@ export function buildNoticeEmailContent({ lots, s, today, nextDay, appUrl }:
   // v1.9: PLAN BỔ SUNG – lô gấp không chờ được đợt kiểm kế tiếp. nextDay = ngày kiểm sớm nhất của các lô này.
   const vars = { ngay: fmtDate(nextDay), so_lo: lots.length, so_tre: lots.filter((p) => p.priority === "LATE").length, ngay_mai: fmtDate(nextDay), so_lo_mai: lots.length, so_capa: 0 };
   const base = fillVars(s.email_subject_tpl || EMAIL_DEFAULTS.subject, vars).replace(/\s*\(0 trễ hạn\)/, "").trim();
-  const subject = /HUMIDITY CHECKING PLAN/i.test(base) ? base.replace(/HUMIDITY CHECKING PLAN/i, "HUMIDITY CHECKING PLAN BỔ SUNG") : `[BỔ SUNG] ${base}`;
+  const subject = /HUMIDITY CHECKING( PLAN)?/i.test(base) ? base.replace(/HUMIDITY CHECKING( PLAN)?/i, (m) => `${m} BỔ SUNG`) : `[BỔ SUNG] ${base}`;
   const intro = (s.email_intro ?? EMAIL_DEFAULTS.intro).trim();
   const sign = (s.email_signature ?? EMAIL_DEFAULTS.signature).trim();
   const para = (x: string) => esc(fillVars(x, vars)).replace(/\r?\n/g, "<br>");
@@ -186,5 +191,6 @@ export function buildNoticeEmailContent({ lots, s, today, nextDay, appUrl }:
     ...lots.map((p) => `- ${fmtDate(p.sched_date)} ${p.brand_code} ${p.jo} / ${p.buyer_po} – ${p.sample_cartons} thùng mẫu`),
     ...(sign ? ["", fillVars(sign, vars)] : [])].join("\n");
   void today;
+  if (s.email_via !== "SMTP") return { subject, html: plainHtml(`<b>PLAN BỔ SUNG</b> (${lots.length} lô gấp)<br><br>${para(intro)}`, sign ? para(sign) : ""), text };
   return { subject, html, text };
 }

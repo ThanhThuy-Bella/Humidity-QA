@@ -34,6 +34,7 @@ export interface Settings {
   email_subject_tpl: string; // tiêu đề, có biến {ngay} {so_lo} {so_tre} {ngay_mai} {so_lo_mai} {so_capa}
   email_intro: string; // lời mở đầu (nhiều dòng)
   email_signature: string; // chữ ký (nhiều dòng)
+  email_via?: "OUTLOOK" | "SMTP"; // v1.11: OUTLOOK = macro Outlook gửi (mail giống mail tay + chữ ký Outlook)
   insp_wave_weekday: number; // v1.9: ngày đợt kiểm trong tuần (1 = T2)
   max_cartons_per_day: number; // v1.9: số thùng mẫu tối đa / ngày (0 = không giới hạn)
   last_imported_file: string | null;

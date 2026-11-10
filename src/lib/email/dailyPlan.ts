@@ -12,7 +12,7 @@ import { waveOnOrAfter } from "../engine/rules";
 /** Lần gửi thành công gần nhất (email ngày hoặc báo trước) – mốc đánh dấu lô MỚI */
 async function lastSentAt(): Promise<string | null> {
   const { data } = await supabaseAdmin().from("email_logs").select("sent_at")
-    .in("kind", ["DAILY", "NOTICE"]).eq("status", "SENT").order("sent_at", { ascending: false }).limit(1);
+    .in("kind", ["DAILY", "NOTICE"]).in("status", ["SENT", "QUEUED"]).order("sent_at", { ascending: false }).limit(1);
   return data?.[0]?.sent_at ?? null;
 }
 
@@ -33,7 +33,7 @@ export async function buildDailyEmail(s: Settings) {
   });
   const d = mail.target;
   const attachment = await toBuffer(await exportForm(mail.due, s, d));
-  return { ...mail, attachment, fileName: `HUMIDITY_CHECKING_PLAN_${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}.xlsx` };
+  return { ...mail, attachment, fileName: `Humidity_Plan_${d}.xlsx` };
 }
 
 type Mail = { to: string[]; cc?: string[]; subject: string; html: string; text: string; attachment?: Buffer; fileName?: string };
@@ -66,8 +66,31 @@ export async function smtpConfig(): Promise<SmtpConf | null> {
   return null;
 }
 
+/** v1.11: cách gửi – OUTLOOK (mặc định: xếp vào hàng chờ, macro Outlook trên máy chị gửi) | SMTP */
+export async function mailVia(): Promise<"OUTLOOK" | "SMTP"> {
+  const { data } = await supabaseAdmin().from("settings").select("email_via").eq("id", 1).maybeSingle();
+  return (data as { email_via?: string } | null)?.email_via === "SMTP" ? "SMTP" : "OUTLOOK";
+}
+
+/**
+ * Gửi email. Trả "QUEUED" (Outlook sẽ gửi) hoặc "SENT" (đã gửi qua SMTP/Resend).
+ * OUTLOOK: ghi vào bảng mail_outbox → macro Outlook gọi /api/mail/outbox lấy mail, gửi bằng Outlook, báo lại.
+ */
+async function deliver(m: Mail, kind: string): Promise<"QUEUED" | "SENT"> {
+  if ((await mailVia()) === "OUTLOOK") {
+    const { error } = await supabaseAdmin().from("mail_outbox").insert({
+      kind, recipients: m.to, cc: m.cc ?? [], subject: m.subject, html: m.html,
+      file_name: m.fileName ?? null, attachment_b64: m.attachment ? m.attachment.toString("base64") : null,
+    });
+    if (error) throw new Error("Không xếp được mail vào hàng chờ Outlook (đã chạy SQL 0006 chưa?): " + error.message);
+    return "QUEUED";
+  }
+  await deliverSmtp(m);
+  return "SENT";
+}
+
 /** Gửi qua SMTP (Office 365 / Gmail) hoặc Resend */
-async function deliver(m: Mail) {
+async function deliverSmtp(m: Mail) {
   const c = await smtpConfig();
   if (!c) throw new Error("Chưa cấu hình hộp thư gửi (chạy SQL mail_secret trong Supabase hoặc thêm biến SMTP_* trên Vercel).");
   if (!c.from) throw new Error("Chưa cấu hình MAIL_FROM.");
@@ -115,13 +138,13 @@ export async function sendDailyEmail(s: Settings, opts: { testTo?: string; force
     return { sent: false, reason: "Không có lô nào – bỏ qua theo cài đặt" };
   }
   try {
-    await deliver({
+    const st = await deliver({
       to, cc: isTest ? undefined : s.email_cc, subject: (isTest ? "[THỬ] " : "") + mail.subject,
       html: mail.html, text: mail.text, attachment: mail.attachment, fileName: mail.fileName,
-    });
-    await db.from("email_logs").insert({ kind: isTest ? "TEST" : "DAILY", recipients: to, subject: mail.subject, lot_count: mail.due.length, status: "SENT" });
+    }, isTest ? "TEST" : "DAILY");
+    await db.from("email_logs").insert({ kind: isTest ? "TEST" : "DAILY", recipients: to, subject: mail.subject, lot_count: mail.due.length, status: st });
     if (!isTest) await db.from("settings").update({ last_email_date: today }).eq("id", 1);
-    return { sent: true, subject: mail.subject, lots: mail.due.length, stale: mail.stale };
+    return { sent: true, queued: st === "QUEUED", subject: mail.subject, lots: mail.due.length, stale: mail.stale };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await db.from("email_logs").insert({ kind: isTest ? "TEST" : "DAILY", recipients: to, subject: mail.subject, lot_count: mail.due.length, status: "ERROR", error: msg.slice(0, 500) });
@@ -177,11 +200,11 @@ export async function sendNewLotNotice(s: Settings) {
   const first = lots[0].sched_date;
   const mail = buildNoticeEmailContent({ lots, s, today, nextDay: first, appUrl });
   const attachment = await toBuffer(await exportForm(lots, s, first));
-  const fileName = `HUMIDITY_CHECKING_PLAN_BO_SUNG_${first.slice(8, 10)}-${first.slice(5, 7)}-${first.slice(0, 4)}.xlsx`;
+  const fileName = `Humidity_Plan_BO_SUNG_${first}.xlsx`;
   try {
-    await deliver({ to, cc: s.email_cc, subject: mail.subject, html: mail.html, text: mail.text, attachment, fileName });
-    await db.from("email_logs").insert({ kind: "NOTICE", recipients: to, subject: mail.subject, lot_count: lots.length, status: "SENT" });
-    return { sent: true, notice: true, subject: mail.subject, lots: lots.length };
+    const st = await deliver({ to, cc: s.email_cc, subject: mail.subject, html: mail.html, text: mail.text, attachment, fileName }, "NOTICE");
+    await db.from("email_logs").insert({ kind: "NOTICE", recipients: to, subject: mail.subject, lot_count: lots.length, status: st });
+    return { sent: true, queued: st === "QUEUED", notice: true, subject: mail.subject, lots: lots.length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await db.from("email_logs").insert({ kind: "NOTICE", recipients: to, subject: mail.subject, lot_count: lots.length, status: "ERROR", error: msg.slice(0, 500) });
