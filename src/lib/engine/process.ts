@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyProcessResult, PlanView, ReadingRow, Settings, StockLot } from "../types";
 import { fetchAll, insertChunked } from "../supabase/admin";
-import { allocateColors, buildStockLots, colorSequence, evaluateLots, placeWithCapacity, planIdPrefix, sampleCartons } from "./rules";
+import { allocateColors, buildStockLots, colorSequence, evaluateLots, lastInspDay, placeWithCapacity, planIdPrefix, sampleCartons } from "./rules";
 import { parseWarehouseReport } from "./parseWarehouse";
 import { dateFromName, fmtDate, todayVN } from "../dates";
 import { fmtReading, lotKey } from "../format";
@@ -71,14 +71,19 @@ export async function generatePlan(db: DB, s: Settings) {
         removed++;
         continue;
       }
-      if ((p.bpo_date ?? "") !== (lot.bpo_date ?? "")) {
+      const bpoChanged = (p.bpo_date ?? "") !== (lot.bpo_date ?? "");
+      // v1.12: lô chưa đo, ngày kiểm còn ở tương lai → xếp lại theo quy tắc đợt hiện hành (lô lập theo rule cũ cũng được dồn về Thứ 2)
+      const reflow = !bpoChanged && p.cartons_tested === 0 && p.sched_date > planDate && !!lot.sched_insp_date;
+      if (bpoChanged || reflow) {
         addLoad(p.sched_date, -p.sample_cartons);
-        const d = placeWithCapacity(lot.sched_insp_date!, p.sample_cartons, load, s.max_cartons_per_day);
+        const d = placeWithCapacity(lot.sched_insp_date!, p.sample_cartons, load, s.max_cartons_per_day, lastInspDay(lot.bpo_date, s));
         addLoad(d, p.sample_cartons);
-        await db.from("inspection_plan").update({
-          bpo_date: lot.bpo_date, trigger: lot.trigger, sched_date: d, updated_at: now(),
-        }).eq("plan_id", p.plan_id);
-        rescheduled++;
+        if (bpoChanged || d !== p.sched_date) {
+          await db.from("inspection_plan").update({
+            bpo_date: lot.bpo_date, trigger: lot.trigger, sched_date: d, updated_at: now(),
+          }).eq("plan_id", p.plan_id);
+          rescheduled++;
+        }
       }
     }
     // cập nhật vị trí / pallet hiện tại cho mọi lô đang mở (QA luôn thấy vị trí mới nhất)
@@ -113,7 +118,7 @@ export async function generatePlan(db: DB, s: Settings) {
     const n = sampleCartons(l.cartons, s, Object.keys(cc).length);
     const alloc = allocateColors(n, cc);
     const colorsSeq = colorSequence(alloc);
-    const day = placeWithCapacity(l.sched_insp_date!, n, load, s.max_cartons_per_day);
+    const day = placeWithCapacity(l.sched_insp_date!, n, load, s.max_cartons_per_day, lastInspDay(l.bpo_date, s));
     addLoad(day, n);
     newPlans.push({
       plan_id: planId, brand_code: l.brand_code, customer: l.customer, jo: l.jo, buyer_po: l.buyer_po,

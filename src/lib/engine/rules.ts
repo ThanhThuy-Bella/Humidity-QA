@@ -119,8 +119,16 @@ export function schedFor(bpo: string, planDate: string, s: Settings): { sched: s
   if (w >= planDate) return { sched: w, urgent: false };
   const next = waveOnOrAfter(planDate, s.insp_wave_weekday ?? 1);
   if (next <= deadline) return { sched: next, urgent: false };
-  // không kịp đợt nào → kiểm ngày làm việc kế tiếp (hôm nay nếu hôm nay là ngày làm việc và chưa qua hạn)
+  // v1.12 (chị duyệt 12/11): không kịp đợt nào → DỒN VÀO LỊCH KIỂM TRƯỚC = đợt của tuần hiện tại (đã/đang diễn ra),
+  // lô hiện ngay trong danh sách "đợt này" trên app + gửi PLAN BỔ SUNG. Điều kiện: BPO cách ngày đợt ≤ 6 tuần (khô) / 4 tuần (mưa).
+  const cur = waveOnOrBefore(planDate, s.insp_wave_weekday ?? 1);
+  if (diffDays(bpo, cur) <= isoMinDays(s, cur)) return { sched: cur, urgent: true };
   return { sched: wd(planDate) === 0 ? nextWorkDay(planDate) : planDate, urgent: true };
+}
+
+/** Hạn kiểm muộn nhất của lô = BPO − preship_deadline (5) */
+export function lastInspDay(bpo: string | null, s: Settings): string | null {
+  return bpo ? addDays(bpo, -s.preship_deadline) : null;
 }
 
 export function evaluateLot(lot: StockLot, lastInsp: string | null, s: Settings, planDate: string): EvaluatedLot {
@@ -187,13 +195,16 @@ export function colorSequence(alloc: Record<string, number>): string[] {
 }
 
 /** Cân tải: tối đa max thùng mẫu / ngày, dư dời sang ngày làm việc kế tiếp (lô to hơn max vẫn được xếp 1 ngày riêng) */
-export function placeWithCapacity(sched: string, cartons: number, load: Map<string, number>, max: number): string {
+/** Tối đa `max` thùng mẫu/ngày: dư → ngày làm việc kế tiếp, nhưng KHÔNG quá hạn kiểm muộn nhất (v1.12) – quá hạn thì giữ ngày đợt */
+export function placeWithCapacity(sched: string, cartons: number, load: Map<string, number>, max: number, maxDay?: string | null): string {
   if (!max) return sched;
   let d = sched;
   for (let i = 0; i < 60; i++) {
     const used = load.get(d) ?? 0;
     if (used === 0 || used + cartons <= max) return d;
-    d = nextWorkDay(d);
+    const n = nextWorkDay(d);
+    if (maxDay && n > maxDay) return sched;
+    d = n;
   }
   return d;
 }
