@@ -42,7 +42,7 @@ export default async function FormPrintPage({ searchParams }: { searchParams: SP
           </div>
           <table className="w-full mt-3 border-collapse text-[11px] [&_td]:border [&_th]:border [&_td]:border-black [&_th]:border-black [&_td]:px-1 [&_th]:px-1 [&_td]:text-center [&_th]:font-bold">
             <thead><tr className="h-16">
-              <th>Date<br />(Ngày)</th><th>Buyer<br />(Khách hàng)</th><th>JO</th><th>Stock in date<br />(Ngày nhập kho)</th><th>Ex-FTY date<br />(Ngày xuất hàng)</th>
+              <th>Date<br />(Ngày)</th><th>Buyer<br />(Khách hàng)</th><th>JO</th><th>Style</th><th>Stock in date<br />(Ngày nhập kho)</th><th>Ex-FTY date<br />(Ngày xuất hàng)</th>
               <th>Total carton<br />(Tổng số thùng)</th><th>Sample ctn<br />({Math.round(s.sample_rate * 100)}% – Số thùng phải kiểm)</th>
               <th>Audit carton no<br />(Số thùng kiểm)</th><th>Q&apos;ty in carton<br />(SL áo trong thùng)</th><th>Actual humidity<br />(Độ ẩm thực tế) (%)</th>
               <th>Result (P/F)</th><th>QA<br />(Kí tên)</th><th>WH (Kho)<br />(Kí tên)</th><th>Security<br />(Bảo vệ)</th><th>Độ ẩm sau tái chế (%)</th><th>QR</th>
@@ -50,13 +50,13 @@ export default async function FormPrintPage({ searchParams }: { searchParams: SP
             <tbody>
               {rows.map((p) => (
                 <tr key={p.plan_id} className="h-[52px] break-inside-avoid">
-                  <td>{fmtDate(p.sched_date)}</td><td>{p.brand_code}</td><td className="font-semibold">{p.jo}</td>
+                  <td>{fmtDate(p.sched_date)}</td><td>{p.brand_code}</td><td className="font-semibold">{p.jo}</td><td>{p.style}</td>
                   <td>{fmtDate(p.stock_in_date)}</td><td>{fmtDate(p.bpo_date)}</td><td>{p.cartons}</td><td>{p.sample_cartons}</td>
                   <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
                   <td className="!p-0.5"><img src={qr(p.plan_id)} alt={`QR ${p.plan_id}`} width={46} height={46} className="mx-auto" /></td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={16} className="py-6">Không có lô cần kiểm đến ngày {fmtDate(d)}.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={17} className="py-6">Không có lô cần kiểm đến ngày {fmtDate(d)}.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -67,6 +67,7 @@ export default async function FormPrintPage({ searchParams }: { searchParams: SP
               <img src={qr(p.plan_id)} alt={`QR ${p.plan_id}`} width={92} height={92} />
               <div className="text-xs leading-snug">
                 <div className="font-bold text-sm">{p.jo}</div>
+                {p.style && <div>Style {p.style}</div>}
                 <div>{p.buyer_po}</div>
                 <div>{p.brand_code} · {p.plan_id}</div>
                 <div className="font-semibold mt-1">Thùng mẫu {i + 1}/{p.sample_cartons}</div>

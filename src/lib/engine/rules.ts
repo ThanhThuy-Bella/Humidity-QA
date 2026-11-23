@@ -90,7 +90,7 @@ export function buildStockLots({ cartons, includedStores, brandMap, gradeFilter 
 //   Đợt đó đã qua → đợt kế tiếp nếu còn ≤ BPO − preship_deadline (5) ; không kịp → ngày làm việc kế tiếp (PLAN BỔ SUNG).
 //   ISO tồn tối thiểu tính đến NGÀY KIỂM (mưa 4 tuần / khô 6 tuần).
 //   BPOStatus DUE khi BPO ≤ max(plan_lookahead, preship_earliest + 7) ngày tới (đủ cho đợt tuần sau).
-//   Trigger: chưa kiểm → PRE-SHIPMENT ; BPO − LastInsp > preship_earliest → RE-INSPECT ; Priority LATE nếu ngày kiểm > BPO − 5.
+//   Trigger: chưa kiểm → PRE-SHIPMENT ; BPO − LastInsp > hạn hiệu lực (6 tuần khô / 4 tuần mưa) → RE-INSPECT ; Priority LATE nếu ngày kiểm > BPO − 5.
 export function isoMinDays(s: Settings, schedIso: string): number {
   const m = monthOf(schedIso);
   return (m >= s.rain_start && m <= s.rain_end ? s.iso_weeks_rain : s.iso_weeks_dry) * 7;
@@ -147,7 +147,9 @@ export function evaluateLot(lot: StockLot, lastInsp: string | null, s: Settings,
   let trigger: Trigger = "";
   if (bpoStatus === "DUE" && atInsp !== null && isoMin !== null && atInsp >= isoMin) {
     if (!lastInsp) trigger = "PRE-SHIPMENT";
-    else if (diffDays(bpo!, lastInsp) > s.preship_earliest) trigger = "RE-INSPECT (new BPO)";
+    // v1.13 (chị duyệt 23/11): kết quả kiểm cũ CÒN HẠN đến ngày BPO (6 tuần mùa khô / 4 tuần mùa mưa, tính theo tháng của lần kiểm)
+    // → không kiểm lại. Trước đây: BPO cách lần kiểm > 10 ngày là kiểm lại → tốn nhiều thùng mẫu.
+    else if (diffDays(bpo!, lastInsp) > isoMinDays(s, lastInsp)) trigger = "RE-INSPECT (new BPO)";
   }
   const deadline = bpo ? addDays(bpo, -s.preship_deadline) : "";
   const priority: EvaluatedLot["priority"] = trigger ? (planDate > deadline || sched! > deadline ? "LATE" : "ON TIME") : "";

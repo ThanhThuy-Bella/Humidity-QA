@@ -62,7 +62,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SP }) {
           <div className="card overflow-x-auto">
             <table className="tbl">
               <thead><tr>
-                <th>Ngày kiểm ẩm</th><th>Brand</th><th>JO</th><th>Buyer PO</th><th className="num">Thùng</th><th className="num">SL</th>
+                <th>Ngày kiểm ẩm</th><th>Brand</th><th>JO</th><th>Style</th><th>Buyer PO</th><th className="num">Thùng</th><th className="num">SL</th>
                 <th>BPO date</th><th>Nhập kho</th><th className="num">Ngày trong kho</th><th className="num">Tuần (ngưỡng)</th>
                 <th className="num">Mẫu</th><th className="num">Đã đo</th><th className="num">Max</th><th>Kết quả</th>
                 <th>Kiểm trước</th><th>Ưu tiên</th><th>Loại</th><th>Vị trí</th><th>PlanID</th>
@@ -72,6 +72,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SP }) {
                   <tr key={p.plan_id}>
                     <td>{fmtDate(p.sched_date)}</td><td>{p.brand_code}</td>
                     <td className="font-semibold">{p.jo}</td>
+                    <td className="whitespace-nowrap">{p.style}</td>
                     <td>{p.buyer_po}</td><td className="num">{n0(p.cartons)}</td><td className="num">{n0(p.qty)}</td>
                     <td>{fmtDate(p.bpo_date)}</td><td>{fmtDate(p.stock_in_date)}</td><td className="num">{p.days_in_wh}</td>
                     <td className="num">{p.aging_weeks} ({p.threshold_weeks})</td><td className="num">{p.sample_cartons}</td>
@@ -81,7 +82,7 @@ export default async function PlanPage({ searchParams }: { searchParams: SP }) {
                     <td className="max-w-[140px] truncate" title={p.locations ?? ""}>{p.locations}</td><td className="text-mute">{p.plan_id}</td>
                   </tr>
                 ))}
-                {rows.length === 0 && <tr><td colSpan={19} className="py-6 text-center text-mute">Không có lô nào khớp bộ lọc.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={20} className="py-6 text-center text-mute">Không có lô nào khớp bộ lọc.</td></tr>}
               </tbody>
             </table>
           </div>

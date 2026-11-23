@@ -156,9 +156,9 @@ export async function exportForm(rows: PlanView[], s: Settings, formDate: string
   const ws = wb.addWorksheet("Form_Print", {
     pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "8:8" },
   });
-  [11, 10, 15, 12, 12, 10, 11, 22, 12, 12, 16, 9, 10, 10, 10, 14].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  [11, 10, 15, 16, 12, 12, 10, 11, 22, 12, 12, 16, 9, 10, 10, 10, 14].forEach((w, i) => (ws.getColumn(i + 1).width = w));
   const line = (r: number, text: string, size = 11, bold = false) => {
-    ws.mergeCells(r, 1, r, 16);
+    ws.mergeCells(r, 1, r, 17);
     const c = ws.getCell(r, 1);
     c.value = text;
     c.font = { name: "Times New Roman", size, bold };
@@ -170,7 +170,7 @@ export async function exportForm(rows: PlanView[], s: Settings, formDate: string
   line(5, "HUMIDITY REPORT", 16, true);
   line(6, `Kho: ${s.form_warehouse}          Date (Ngày): ${fmtDate(formDate)}          Chuẩn: ≤ ${s.hum_limit}% = P;  > ${s.hum_limit}% = F;  ${s.readings_per_carton} điểm đo/thùng`, 10);
   const heads = [
-    "Date\n(Ngày)", "Buyer\n(Khách hàng)", "JO", "Stock in date\n(Ngày nhập kho)", "Ex-FTY date\n(Ngày xuất hàng)",
+    "Date\n(Ngày)", "Buyer\n(Khách hàng)", "JO", "Style", "Stock in date\n(Ngày nhập kho)", "Ex-FTY date\n(Ngày xuất hàng)",
     "Total carton q'ty in WH\n(Tổng số thùng)", `Sample ctn\n(${Math.round(s.sample_rate * 100)}% / đủ màu – Số thùng phải kiểm)`,
     "Color – sample ctn\n(Màu – số thùng mẫu)",
     "Audit carton no\n(Số thùng kiểm)", "Q'ty in carton\n(Số lượng áo trong thùng)", "Actual humidity\n(Độ ẩm thực tế)\n(%)",
@@ -190,14 +190,14 @@ export async function exportForm(rows: PlanView[], s: Settings, formDate: string
   rows.forEach((p, i) => {
     const r = ws.getRow(9 + i);
     const colorTxt = Object.entries(p.sample_colors ?? {}).map(([c, n]) => `${c}: ${n}`).join("\n") || (p.color ?? "");
-    const vals: unknown[] = [toDate(p.sched_date), p.brand_code, p.jo, toDate(p.stock_in_date), toDate(p.bpo_date), p.cartons, p.sample_cartons, colorTxt];
-    for (let c = 1; c <= 16; c++) {
+    const vals: unknown[] = [toDate(p.sched_date), p.brand_code, p.jo, p.style ?? "", toDate(p.stock_in_date), toDate(p.bpo_date), p.cartons, p.sample_cartons, colorTxt];
+    for (let c = 1; c <= 17; c++) {
       const cell = r.getCell(c);
       cell.value = (vals[c - 1] ?? null) as ExcelJS.CellValue;
       cell.font = { name: "Times New Roman", size: 11 };
-      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: c === 8 };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: c === 4 || c === 9 };
       cell.border = border;
-      if (c === 1 || c === 4 || c === 5) cell.numFmt = "dd/mm/yyyy";
+      if (c === 1 || c === 5 || c === 6) cell.numFmt = "dd/mm/yyyy";
     }
     r.height = Math.max(30, 15 * Object.keys(p.sample_colors ?? {}).length);
   });
