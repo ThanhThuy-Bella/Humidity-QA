@@ -6,10 +6,24 @@ import type { EvaluatedLot, Settings, StockLot, WarehouseCarton, Trigger } from 
 import { addDays, diffDays, maxDate, monthOf } from "../dates";
 import { joinKeys, lotKey, roundUp } from "../format";
 
+/** v1.14: danh sách Buyer PO của lô gộp (nối bằng ", ") */
+export const PO_SEP = ", ";
+export function splitPos(po: string | null | undefined): string[] {
+  return String(po ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+}
+export function joinPos(list: string[]): string {
+  return Array.from(new Set(list.map((x) => x.trim()).filter(Boolean))).sort().join(PO_SEP);
+}
+/** Khóa JO|PO cho từng PO của lô */
+export function poKeys(jo: string, po: string | null | undefined): string[] {
+  const l = splitPos(po);
+  return l.length ? l.map((x) => lotKey(jo, x)) : [lotKey(jo, "")];
+}
+
 // R1. Lọc + gom lô
 //   - Chỉ store Include = Y, chỉ Grade = GradeFilter (trống = mọi grade)
 //   - Brand Code từ Brand Map; chưa có → tiền tố Style no trước '-' và tự thêm vào Brand Map
-//   - Lô = Brand Code + JO + Buyer PO ; Cartons = số UCC ; Qty = tổng ; BPO date & Stock-in = ngày SỚM nhất
+//   - Lô = Brand Code + JO + Buyer PO, rồi GỘP các PO cùng JO + BPO date (v1.14) ; Cartons = số UCC ; Qty = tổng ; BPO date & Stock-in = ngày SỚM nhất
 export interface BuildLotsInput {
   cartons: WarehouseCarton[];
   includedStores: Set<string>;
@@ -77,7 +91,27 @@ export function buildStockLots({ cartons, includedStores, brandMap, gradeFilter 
     if (w.inWarehouseDate && (!a.stock_in_date || w.inWarehouseDate < a.stock_in_date)) a.stock_in_date = w.inWarehouseDate;
   }
 
-  const lots: StockLot[] = Array.from(idx.values()).map(({ _cc, _col, _loc, _pal, _sto, _lp, ...l }) => {
+  // v1.14 (chị duyệt 24/11 – cách B): GỘP các PO cùng Brand + JO + BPO date thành 1 lô kiểm
+  //   → 2% tính trên TỔNG thùng của JO, đủ màu tính theo JO (màu đã có ở PO này không phải lấy lại ở PO khác).
+  //   Buyer PO của lô gộp = các PO nối bằng ", " (PO_SEP).
+  const merged = new Map<string, Acc>();
+  for (const a of idx.values()) {
+    const mk = `${a.brand_code.toUpperCase()}|${a.jo.trim().toUpperCase()}|${a.bpo_date ?? ""}`;
+    const m = merged.get(mk);
+    if (!m) { merged.set(mk, { ...a, _cc: new Map(a._cc), _col: new Set(a._col), _loc: new Set(a._loc), _pal: new Set(a._pal), _sto: new Set(a._sto), _lp: new Map(Array.from(a._lp, ([k, v]) => [k, new Set(v)])) }); continue; }
+    m.buyer_po = joinPos([...splitPos(m.buyer_po), ...splitPos(a.buyer_po)]);
+    m.cartons += a.cartons;
+    m.qty += a.qty;
+    a._cc.forEach((n, c) => m._cc.set(c, (m._cc.get(c) ?? 0) + n));
+    a._col.forEach((x) => m._col.add(x));
+    a._loc.forEach((x) => m._loc.add(x));
+    a._pal.forEach((x) => m._pal.add(x));
+    a._sto.forEach((x) => m._sto.add(x));
+    a._lp.forEach((v, k) => { if (!m._lp.has(k)) m._lp.set(k, new Set()); v.forEach((x) => m._lp.get(k)!.add(x)); });
+    if (a.stock_in_date && (!m.stock_in_date || a.stock_in_date < m.stock_in_date)) m.stock_in_date = a.stock_in_date;
+  }
+
+  const lots: StockLot[] = Array.from(merged.values()).map(({ _cc, _col, _loc, _pal, _sto, _lp, ...l }) => {
     const lp: Record<string, string[]> = {};
     Array.from(_lp.keys()).sort().forEach((k) => (lp[k] = Array.from(_lp.get(k)!).sort()));
     return { ...l, colors: joinKeys(_col), locations: joinKeys(_loc), pallets: joinKeys(_pal), stores: joinKeys(_sto), location_pallets: lp, color_cartons: Object.fromEntries(_cc) };
@@ -161,8 +195,19 @@ export function evaluateLot(lot: StockLot, lastInsp: string | null, s: Settings,
   };
 }
 
+/** v1.14: lô gộp nhiều PO → ngày kiểm gần nhất = ngày CŨ NHẤT trong các PO (PO nào chưa kiểm → coi như chưa kiểm) */
+export function lastInspOf(l: { jo: string; buyer_po: string }, lastInsp: Map<string, string>): string | null {
+  let min: string | null = null;
+  for (const k of poKeys(l.jo, l.buyer_po)) {
+    const d = lastInsp.get(k);
+    if (!d) return null;
+    if (!min || d < min) min = d;
+  }
+  return min;
+}
+
 export function evaluateLots(lots: StockLot[], lastInsp: Map<string, string>, s: Settings, planDate: string) {
-  return lots.map((l) => evaluateLot(l, lastInsp.get(lotKey(l.jo, l.buyer_po)) ?? null, s, planDate));
+  return lots.map((l) => evaluateLot(l, lastInspOf(l, lastInsp), s, planDate));
 }
 
 // R3. Cỡ mẫu (v1.9): max(ROUNDUP(Cartons × SampleRate), số màu), tối thiểu 1 – mỗi màu ít nhất 1 thùng

@@ -2,10 +2,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyProcessResult, PlanView, ReadingRow, Settings, StockLot } from "../types";
 import { fetchAll, insertChunked } from "../supabase/admin";
-import { allocateColors, buildStockLots, colorSequence, evaluateLots, lastInspDay, placeWithCapacity, planIdPrefix, sampleCartons } from "./rules";
+import { allocateColors, buildStockLots, colorSequence, evaluateLots, lastInspDay, placeWithCapacity, planIdPrefix, poKeys, sampleCartons, splitPos } from "./rules";
 import { parseWarehouseReport } from "./parseWarehouse";
 import { dateFromName, fmtDate, todayVN } from "../dates";
-import { fmtReading, lotKey } from "../format";
+import { fmtReading } from "../format";
 import { planDateOf } from "../settings";
 
 type DB = SupabaseClient;
@@ -17,9 +17,11 @@ export async function loadLastInspMap(db: DB): Promise<Map<string, string>> {
   );
   const m = new Map<string, string>();
   for (const r of rows) {
-    const k = lotKey(r.jo, r.bpo ?? "");
-    const cur = m.get(k);
-    if (!cur || r.inspection_date > cur) m.set(k, r.inspection_date);
+    // v1.14: lô gộp lưu nhiều PO trong 1 dòng → ghi ngày kiểm cho TỪNG PO
+    for (const k of poKeys(r.jo, r.bpo)) {
+      const cur = m.get(k);
+      if (!cur || r.inspection_date > cur) m.set(k, r.inspection_date);
+    }
   }
   return m;
 }
@@ -47,8 +49,27 @@ export async function generatePlan(db: DB, s: Settings) {
   const planDate = planDateOf(s);
   const [lots, lastInsp, open] = await Promise.all([loadStockLots(db), loadLastInspMap(db), loadOpenPlans(db)]);
   const evaluated = evaluateLots(lots, lastInsp, s, planDate);
-  const lotIdx = new Map<string, (typeof evaluated)[number]>();
-  for (const l of evaluated) lotIdx.set(lotKey(l.jo, l.buyer_po), l);
+  type Ev = (typeof evaluated)[number];
+  // v1.14: ghép kế hoạch đang mở với lô theo JO + có chung ít nhất 1 PO (lô gộp nhiều PO / kế hoạch cũ từng PO)
+  const byJo = new Map<string, Ev[]>();
+  for (const l of evaluated) { const j = l.jo.trim().toUpperCase(); (byJo.get(j) ?? byJo.set(j, []).get(j)!).push(l); }
+  const findLot = (jo: string, po: string): Ev | undefined => {
+    const ks = new Set(poKeys(jo, po));
+    return (byJo.get(jo.trim().toUpperCase()) ?? []).find((l) => poKeys(l.jo, l.buyer_po).some((k) => ks.has(k)));
+  };
+  const samePos = (a: string, b: string) => splitPos(a).sort().join("|").toUpperCase() === splitPos(b).sort().join("|").toUpperCase();
+  // lô gộp mà các kế hoạch cũ (từng PO, chưa đo) chưa khớp đủ PO → hủy để lập 1 kế hoạch gộp
+  const matched = new Map<Ev, PlanView[]>();
+  for (const p of open) {
+    if (p.kind === "REWORK") continue;
+    const l = findLot(p.jo, p.buyer_po);
+    if (l) (matched.get(l) ?? matched.set(l, []).get(l)!).push(p);
+  }
+  const regroup = new Set<string>();
+  for (const [l, ps] of matched) {
+    const untouched = ps.every((p) => p.lot_result === "PENDING" && p.cartons_tested === 0);
+    if (untouched && (ps.length > 1 || !samePos(ps[0].buyer_po, l.buyer_po))) ps.forEach((p) => regroup.add(p.plan_id));
+  }
 
   let rescheduled = 0;
   let removed = 0;
@@ -56,13 +77,19 @@ export async function generatePlan(db: DB, s: Settings) {
   const load = new Map<string, number>();
   const addLoad = (d: string, n: number) => load.set(d, (load.get(d) ?? 0) + n);
   for (const p of open) if (p.lot_result === "PENDING" || p.lot_result === "IN PROGRESS") addLoad(p.sched_date, Math.max(0, p.sample_cartons - p.cartons_tested));
-  const openKeys = new Set<string>();
+  const openLots = new Set<Ev>();
   const now = () => new Date().toISOString();
 
   for (const p of open) {
     if (p.kind === "REWORK") continue; // lượt kiểm lại sau tái chế: không bị kế hoạch hằng ngày hủy / dời
-    const key = lotKey(p.jo, p.buyer_po);
-    const lot = lotIdx.get(key);
+    const lot = findLot(p.jo, p.buyer_po);
+    if (regroup.has(p.plan_id)) {
+      addLoad(p.sched_date, -Math.max(0, p.sample_cartons - p.cartons_tested));
+      await db.from("inspection_readings").delete().eq("plan_id", p.plan_id);
+      await db.from("inspection_plan").update({ status: "CANCELLED", cancel_reason: "Gộp các PO cùng JO thành 1 lô kiểm (2% + đủ màu theo JO)", updated_at: now() }).eq("plan_id", p.plan_id);
+      removed++;
+      continue;
+    }
     if (p.lot_result === "PENDING") {
       if (!lot || !lot.trigger) {
         const reason = !lot ? "Lô không còn trong báo cáo kho (đã xuất)" : "Không còn thuộc diện kiểm (quá BPO date / chưa đến hạn)";
@@ -92,7 +119,7 @@ export async function generatePlan(db: DB, s: Settings) {
         locations: lot.locations, pallets: lot.pallets, location_pallets: lot.location_pallets,
       }).eq("plan_id", p.plan_id);
     }
-    openKeys.add(key);
+    if (lot) openLots.add(lot);
   }
 
   const prefix = planIdPrefix(planDate);
@@ -110,8 +137,7 @@ export async function generatePlan(db: DB, s: Settings) {
     .filter((l) => l.trigger)
     .sort((a, b) => (a.sched_insp_date! + (a.bpo_date ?? "") + a.brand_code).localeCompare(b.sched_insp_date! + (b.bpo_date ?? "") + b.brand_code));
   for (const l of sorted) {
-    const key = lotKey(l.jo, l.buyer_po);
-    if (openKeys.has(key)) continue;
+    if (openLots.has(l)) continue;
     seq++;
     const planId = prefix + String(seq).padStart(3, "0");
     const cc = l.color_cartons ?? {};
@@ -127,7 +153,7 @@ export async function generatePlan(db: DB, s: Settings) {
       sched_date: day, trigger: l.trigger, sample_cartons: n, sample_colors: alloc, status: "OPEN",
     });
     for (let i = 1; i <= n; i++) newReadings.push({ plan_id: planId, sample_no: i, color: colorsSeq[i - 1] ?? null });
-    openKeys.add(key);
+    openLots.add(l);
   }
   await insertChunked(db, "inspection_plan", newPlans);
   await insertChunked(db, "inspection_readings", newReadings, 1000);
